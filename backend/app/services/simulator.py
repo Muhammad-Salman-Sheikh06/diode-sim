@@ -173,7 +173,18 @@ def _build_netlist(
     # Collect non-ground net names for voltage prints
     net_names = sorted({n for n in nets.values() if n != "0"})
     v_prints = " ".join(f"v({n})" for n in net_names)
-    i_prints = " ".join(f"i({e})" for e in elem_to_comp)
+
+    i_prints_list = []
+    for e in elem_to_comp:
+        if e.startswith('v'):
+            i_prints_list.append(f"i({e})")
+        elif e.startswith('d'):
+            i_prints_list.append(f"@{e}[id]")
+        elif e.startswith('q'):
+            i_prints_list.append(f"@{e}[ic]")
+        else:
+            i_prints_list.append(f"@{e}[i]")
+    i_prints = " ".join(i_prints_list)
 
     # Use a .control block so we can print both voltages and branch currents
     lines.append(".control\n")
@@ -231,9 +242,9 @@ def _parse_output(
         except ValueError:
             pass
 
-    # ── "i(elem) = value" or "i(elem)   value" ───────────────────────────────
+    # ── "i(elem) = value" or "@elem[i] = value" ───────────────────────────────
     for m in re.finditer(
-        r"i\((\w+)\)\s*(?:=\s*)?([\-\d.eE+]+)", output, re.IGNORECASE
+        r"(?:i\(|@)(\w+)(?:\)|\[[a-z]+\])\s*(?:=\s*)?([\-\d.eE+]+)", output, re.IGNORECASE
     ):
         try:
             currents[m.group(1).lower()] = float(m.group(2))
