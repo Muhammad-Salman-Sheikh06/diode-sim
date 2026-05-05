@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import './theme.css'
 import { CircuitEditor } from './scenes/CircuitEditor'
 import { Sidebar } from './components/Sidebar'
 import { Toast } from './components/Toast'

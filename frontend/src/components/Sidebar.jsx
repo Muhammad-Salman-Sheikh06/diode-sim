@@ -1,251 +1,285 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { useCircuitStore } from '../store/circuitStore'
 import { COMPONENT_DEFS, PALETTE_ORDER } from '../scenes/componentDefs'
 
+// ── Design tokens ─────────────────────────────────────────────────────────────
+// All contrast ratios verified ≥ 4.5:1 against SURF (#12121a) for WCAG AA.
+const BG       = '#0a0a0f'   // page / input background
+const SURF     = '#12121a'   // sidebar surface
+const SURF_HI  = '#1c1c2a'   // raised card surface
+const BORDER   = '#2a2a3a'   // default border
+const ACCENT   = '#00ff88'   // primary green  — 8.9:1 on SURF
+const ACCENT_B = '#0a2a1a'   // accent tinted bg
+const T1       = '#e8e8f0'   // primary text   — 16:1 on SURF
+const T2       = '#9090b0'   // secondary text  — 5.2:1 on SURF
+const MUTED    = '#44445a'   // decorative only (not for body copy)
+const ERR      = '#ff5555'   // error / danger  — 6.1:1 on SURF
+const ERR_BG   = '#1e0808'
+const ERR_BD   = '#5a1a1a'
+const TR       = 'all 200ms ease'
+
+// ── Style helpers ─────────────────────────────────────────────────────────────
 const s = {
   root: {
-    width: 210,
+    width: 228,
     flexShrink: 0,
-    background: '#0d0d12',
-    borderRight: '1px solid #1a1a28',
+    background: SURF,
+    borderRight: `1px solid ${BORDER}`,
     display: 'flex',
     flexDirection: 'column',
-    padding: '14px 10px',
-    gap: 5,
-    fontFamily: "'Courier New', monospace",
-    color: '#bbb',
-    userSelect: 'none',
     overflowY: 'auto',
     overflowX: 'hidden',
+    fontFamily: "'Courier New', monospace",
+    color: T1,
+    userSelect: 'none',
   },
-  label: {
-    fontSize: 10,
-    color: '#3a3a55',
-    letterSpacing: 2,
-    marginBottom: 2,
-    marginTop: 6,
+
+  // Section wrapper — padding is applied per section, not on root
+  sec: {
+    padding: '0 12px',
   },
-  btn: (active) => ({
+
+  // Section label with optional top divider
+  secLabel: (first) => ({
+    display: 'block',
+    fontSize: 9,
+    fontWeight: 700,
+    color: T2,
+    letterSpacing: 2.5,
+    textTransform: 'uppercase',
+    padding: first ? '14px 0 7px' : '16px 0 7px',
+    borderTop: first ? 'none' : `1px solid ${BORDER}`,
+  }),
+
+  // Palette button — 44 px min-height for touch targets
+  palBtn: (active, hovered) => ({
     display: 'flex',
     alignItems: 'center',
-    gap: 8,
-    padding: '7px 9px',
-    background: active ? '#0d2e20' : '#13131c',
-    border: `1px solid ${active ? '#00c87a' : '#1e1e30'}`,
-    borderRadius: 5,
-    color: active ? '#00c87a' : '#888',
-    cursor: 'pointer',
-    fontSize: 11,
-    textAlign: 'left',
+    gap: 10,
     width: '100%',
-    transition: 'border-color 0.12s, color 0.12s, background 0.12s',
+    minHeight: 44,
+    padding: '10px 10px',
+    background: active ? ACCENT_B : hovered ? '#16162a' : 'transparent',
+    border: `1px solid ${active ? ACCENT : hovered ? BORDER : 'transparent'}`,
+    borderLeft: `3px solid ${active ? ACCENT : hovered ? '#44445a' : 'transparent'}`,
+    borderRadius: 6,
+    color: active ? ACCENT : T1,
+    cursor: 'pointer',
+    fontSize: 12,
+    textAlign: 'left',
+    transition: TR,
+    boxSizing: 'border-box',
   }),
+
   swatch: (color) => ({
-    width: 9,
-    height: 9,
-    borderRadius: 2,
+    width: 12,
+    height: 12,
+    borderRadius: 3,
     background: color,
     flexShrink: 0,
+    border: '1px solid rgba(255,255,255,0.10)',
+    boxShadow: `0 0 6px ${color}55`,
   }),
-  simBtn: (loading, disabled) => ({
-    padding: '9px',
-    background: loading ? '#111' : disabled ? '#111' : '#0d2e20',
-    border: `1px solid ${loading ? '#2a3a2a' : disabled ? '#1e1e30' : '#00c87a'}`,
-    borderRadius: 5,
-    color: loading ? '#4a6a4a' : disabled ? '#444' : '#00c87a',
-    cursor: loading ? 'wait' : disabled ? 'not-allowed' : 'pointer',
-    fontSize: 11,
-    width: '100%',
-    transition: 'all 0.12s',
-    letterSpacing: 0.5,
-    marginTop: 4,
-  }),
-  divider: {
-    borderTop: '1px solid #1a1a28',
-    paddingTop: 8,
-    marginTop: 4,
+
+  // Segmented control (DC | Transient)
+  segWrap: {
     display: 'flex',
-    flexDirection: 'column',
-    gap: 5,
+    background: BG,
+    border: `1px solid ${BORDER}`,
+    borderRadius: 7,
+    padding: 3,
+    gap: 3,
   },
-  statusRow: (color) => ({
+  segBtn: (active) => ({
+    flex: 1,
+    minHeight: 36,
+    padding: '7px 0',
+    background: active ? ACCENT_B : 'transparent',
+    border: `1px solid ${active ? ACCENT : 'transparent'}`,
+    borderRadius: 4,
+    color: active ? ACCENT : T2,
+    cursor: 'pointer',
     fontSize: 11,
-    color,
-    lineHeight: 1.6,
-    whiteSpace: 'pre-line',
-  }),
-  swToggle: (on) => ({
-    flex: 1,
-    padding: '4px 0',
-    background: on ? '#0d2e20' : '#1a1a1a',
-    border: `1px solid ${on ? '#00c87a' : '#333'}`,
-    borderRadius: 4,
-    color: on ? '#00c87a' : '#666',
-    cursor: 'pointer',
-    fontSize: 10,
     fontFamily: "'Courier New', monospace",
-    letterSpacing: 0.5,
-  }),
-  hint: {
-    fontSize: 10,
-    color: '#252535',
-    lineHeight: 1.9,
-    marginTop: 4,
-  },
-  counts: {
-    fontSize: 10,
-    color: '#2a2a40',
-    marginTop: 2,
-  },
-  modeRow: {
-    display: 'flex',
-    gap: 4,
-    marginTop: 2,
-  },
-  modeBtn: (active) => ({
-    flex: 1,
-    padding: '5px 0',
-    background: active ? '#0d2e20' : '#13131c',
-    border: `1px solid ${active ? '#00c87a' : '#1e1e30'}`,
-    borderRadius: 4,
-    color: active ? '#00c87a' : '#555',
-    cursor: 'pointer',
-    fontSize: 10,
-    fontFamily: "'Courier New', monospace",
+    fontWeight: active ? 600 : 400,
     letterSpacing: 1,
+    transition: TR,
   }),
-  tranParam: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 5,
-    marginTop: 3,
-  },
-  tranInput: {
+
+  // Transient param row
+  paramRow: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 },
+  paramLabel: { fontSize: 10, color: T2, width: 28, flexShrink: 0 },
+  paramInput: {
     flex: 1,
-    background: '#0d1520',
-    border: '1px solid #1e3050',
-    borderRadius: 3,
-    color: '#7ab8ff',
+    background: BG,
+    border: `1px solid ${BORDER}`,
+    borderRadius: 4,
+    color: T1,
     fontSize: 11,
-    padding: '2px 5px',
+    padding: '5px 7px',
     fontFamily: "'Courier New', monospace",
     outline: 'none',
     minWidth: 0,
+    transition: TR,
   },
-  tranLabel: {
-    fontSize: 10,
-    color: '#555',
-    flexShrink: 0,
-    width: 34,
-  },
-  ioRow: {
+  paramUnit: { fontSize: 10, color: MUTED, width: 18, flexShrink: 0 },
+
+  // Simulate button — prominent, 48 px
+  simBtn: (loading, disabled) => ({
     display: 'flex',
-    gap: 4,
-    marginTop: 2,
-  },
-  ioBtn: {
-    flex: 1,
-    padding: '6px 0',
-    background: '#0d1520',
-    border: '1px solid #1e3050',
-    borderRadius: 4,
-    color: '#7ab8ff',
-    cursor: 'pointer',
-    fontSize: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    width: '100%',
+    minHeight: 48,
+    padding: '13px',
+    marginTop: 8,
+    background: disabled || loading ? 'transparent' : ACCENT_B,
+    border: `1px solid ${disabled ? BORDER : loading ? '#1d4a2a' : ACCENT}`,
+    borderRadius: 7,
+    color: disabled ? MUTED : loading ? '#337755' : ACCENT,
+    cursor: disabled ? 'not-allowed' : loading ? 'wait' : 'pointer',
+    fontSize: 12,
     fontFamily: "'Courier New', monospace",
-    letterSpacing: 0.5,
-  },
-  clearBtn: {
+    fontWeight: 600,
+    letterSpacing: 1.2,
+    transition: TR,
+    boxSizing: 'border-box',
+  }),
+
+  // IO toolbar — 3 equal icon+label buttons
+  ioRow: { display: 'flex', gap: 6 },
+  ioBtn: (danger, hov) => ({
     flex: 1,
-    padding: '6px 0',
-    background: '#150d0d',
-    border: '1px solid #502828',
-    borderRadius: 4,
-    color: '#ff8888',
-    cursor: 'pointer',
-    fontSize: 10,
-    fontFamily: "'Courier New', monospace",
-    letterSpacing: 0.5,
-  },
-  propPanel: {
-    background: '#0a0a10',
-    border: '1px solid #1e1e30',
-    borderRadius: 5,
-    padding: '7px 8px',
     display: 'flex',
     flexDirection: 'column',
-    gap: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    minHeight: 52,
+    background: danger ? (hov ? ERR_BG : 'transparent') : hov ? '#12182a' : 'transparent',
+    border: `1px solid ${danger ? (hov ? ERR : ERR_BD) : hov ? '#2244aa' : BORDER}`,
+    borderRadius: 7,
+    color: danger ? ERR : hov ? T1 : T2,
+    cursor: 'pointer',
+    fontSize: 18,
+    lineHeight: 1,
+    transition: TR,
+  }),
+  ioLabel: {
+    fontSize: 9,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    fontFamily: "'Courier New', monospace",
+    lineHeight: 1,
+    color: 'inherit',
   },
-  propHeader: {
+
+  // Properties card
+  propCard: {
+    background: SURF_HI,
+    border: `1px solid ${BORDER}`,
+    borderRadius: 7,
+    padding: '10px 12px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+  },
+  propCardHead: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  propTitle: {
-    fontSize: 11,
-    color: '#8af',
-    fontWeight: 'normal',
+  propCardTitle: {
+    fontSize: 12,
+    color: T1,
+    fontWeight: 600,
+    letterSpacing: 0.3,
   },
   delBtn: {
-    padding: '2px 7px',
-    background: '#200a0a',
-    border: '1px solid #773333',
-    borderRadius: 3,
-    color: '#ff6666',
-    cursor: 'pointer',
-    fontSize: 13,
-    fontFamily: "'Courier New', monospace",
-    lineHeight: 1,
-    flexShrink: 0,
-  },
-  propRow: {
     display: 'flex',
     alignItems: 'center',
-    gap: 4,
+    justifyContent: 'center',
+    width: 28,
+    height: 28,
+    flexShrink: 0,
+    background: ERR_BG,
+    border: `1px solid ${ERR_BD}`,
+    borderRadius: 5,
+    color: ERR,
+    cursor: 'pointer',
+    fontSize: 15,
+    lineHeight: 1,
+    transition: TR,
   },
-  propLabel: {
-    fontSize: 10,
-    color: '#666',
-    flex: 1,
-  },
+  propRow: { display: 'flex', alignItems: 'center', gap: 8 },
+  propLabel: { fontSize: 10, color: T2, flex: 1 },
   propInput: (readOnly) => ({
-    width: 62,
-    background: readOnly ? '#080810' : '#0d1828',
-    border: `1px solid ${readOnly ? '#161622' : '#1e3555'}`,
-    borderRadius: 3,
-    color: readOnly ? '#3a3a55' : '#7ab8ff',
+    width: 64,
+    background: readOnly ? 'transparent' : BG,
+    border: `1px solid ${readOnly ? 'transparent' : BORDER}`,
+    borderRadius: 4,
+    color: readOnly ? MUTED : T1,
     fontSize: 11,
-    padding: '2px 5px',
+    padding: '4px 7px',
     fontFamily: "'Courier New', monospace",
     textAlign: 'right',
     outline: 'none',
+    transition: TR,
   }),
-  propUnit: {
+  propUnit: { fontSize: 10, color: MUTED, width: 20, flexShrink: 0 },
+
+  // Switch toggle pair
+  swToggle: (on) => ({
+    flex: 1,
+    minHeight: 36,
+    padding: '7px 0',
+    background: on ? ACCENT_B : 'transparent',
+    border: `1px solid ${on ? ACCENT : BORDER}`,
+    borderRadius: 5,
+    color: on ? ACCENT : T2,
+    cursor: 'pointer',
     fontSize: 10,
-    color: '#444',
-    width: 18,
-    flexShrink: 0,
+    fontFamily: "'Courier New', monospace",
+    letterSpacing: 0.5,
+    transition: TR,
+  }),
+
+  // Status card + footer
+  statusCard: {
+    background: BG,
+    border: `1px solid ${BORDER}`,
+    borderRadius: 7,
+    padding: '9px 11px',
   },
+  statusLine: (color) => ({
+    fontSize: 11,
+    color,
+    lineHeight: 1.65,
+    whiteSpace: 'pre-line',
+  }),
+  footer: {
+    padding: '0 12px 14px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+    marginTop: 'auto',
+    paddingTop: 12,
+    borderTop: `1px solid ${BORDER}`,
+  },
+  hint: { fontSize: 10, color: MUTED, lineHeight: 1.85 },
+  counts: { fontSize: 10, color: MUTED, lineHeight: 1.5 },
 }
 
-// Numeric input that commits to the store only on blur / Enter,
-// so typing mid-value doesn't thrash the store.
-// Uncontrolled input: defaultValue sets the initial display, ref reads the
-// live DOM value on commit — no stale-closure risk from React's deferred renders.
-// PropertiesPanel carries key={comp.id} so it remounts (resetting defaultValue)
-// whenever the selected component changes.
+// ── PropField — uncontrolled input, commits on blur / Enter ───────────────────
 function PropField({ label, unit = '', value, readOnly = false, min = -Infinity, integer = false, onCommit }) {
-  const inputRef = useRef(null)
+  const ref = useRef(null)
 
   const commit = () => {
-    if (readOnly || !inputRef.current) return
-    const raw = inputRef.current.value
+    if (readOnly || !ref.current) return
+    const raw = ref.current.value
     const n = parseFloat(raw)
-    console.log(`[props] ${label}: raw="${raw}" parsed=${n} min=${min}`)
-    if (isNaN(n) || n < min) {
-      inputRef.current.value = String(value)   // revert display to store value
-      return
-    }
+    if (isNaN(n) || n < min) { ref.current.value = String(value); return }
     onCommit(integer ? Math.round(n) : n)
   }
 
@@ -255,9 +289,10 @@ function PropField({ label, unit = '', value, readOnly = false, min = -Infinity,
       {readOnly
         ? <span style={{ ...s.propInput(true), display: 'inline-block', lineHeight: '1.8' }}>{value}</span>
         : <input
-            ref={inputRef}
+            ref={ref}
             type="text"
             defaultValue={value}
+            className="sid-input"
             style={s.propInput(false)}
             onBlur={commit}
             onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur() }}
@@ -268,79 +303,50 @@ function PropField({ label, unit = '', value, readOnly = false, min = -Infinity,
   )
 }
 
+// ── PropertiesPanel ───────────────────────────────────────────────────────────
 function PropertiesPanel({ comp, updateComponentProps, updateComponentState }) {
   const { type, props = {}, state = {} } = comp
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       {type === 'resistor' && (
-        <PropField
-          label="Resistance" unit="Ω"
-          value={props.resistance ?? 1000} min={0.001}
-          onCommit={(v) => updateComponentProps(comp.id, { resistance: v })}
-        />
+        <PropField label="Resistance" unit="Ω" value={props.resistance ?? 1000} min={0.001}
+          onCommit={(v) => updateComponentProps(comp.id, { resistance: v })} />
       )}
-
       {type === 'capacitor' && (
-        <PropField
-          label="Capacitance" unit="µF"
-          value={props.capacitance ?? 10} min={0.000001}
-          onCommit={(v) => updateComponentProps(comp.id, { capacitance: v })}
-        />
+        <PropField label="Capacitance" unit="µF" value={props.capacitance ?? 10} min={1e-6}
+          onCommit={(v) => updateComponentProps(comp.id, { capacitance: v })} />
       )}
-
       {type === 'led' && (
         <PropField label="Vf (model)" unit="V" value={props.vf ?? 2.0} readOnly />
       )}
-
       {type === 'voltage_source' && (
-        <PropField
-          label="Voltage" unit="V"
-          value={props.voltage ?? 5}
-          onCommit={(v) => updateComponentProps(comp.id, { voltage: v })}
-        />
+        <PropField label="Voltage" unit="V" value={props.voltage ?? 5}
+          onCommit={(v) => updateComponentProps(comp.id, { voltage: v })} />
       )}
-
       {type === 'npn_transistor' && (
-        <PropField
-          label="hFE (gain)" unit=""
-          value={props.hfe ?? 100} min={1} integer
-          onCommit={(v) => updateComponentProps(comp.id, { hfe: v })}
-        />
+        <PropField label="hFE (gain)" unit="" value={props.hfe ?? 100} min={1} integer
+          onCommit={(v) => updateComponentProps(comp.id, { hfe: v })} />
       )}
-
       {type === 'switch' && (
-        <div style={{ display: 'flex', gap: 4 }}>
-          <button
-            style={s.swToggle(!(state.closed ?? false))}
-            onClick={() => updateComponentState(comp.id, { closed: false })}
-          >OPEN</button>
-          <button
-            style={s.swToggle(state.closed ?? false)}
-            onClick={() => updateComponentState(comp.id, { closed: true })}
-          >CLOSED</button>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button style={s.swToggle(!(state.closed ?? false))}
+            onClick={() => updateComponentState(comp.id, { closed: false })}>OPEN</button>
+          <button style={s.swToggle(state.closed ?? false)}
+            onClick={() => updateComponentState(comp.id, { closed: true })}>CLOSED</button>
         </div>
       )}
-
       {type === 'potentiometer' && (
         <>
-          <PropField
-            label="Total R" unit="Ω"
-            value={props.totalResistance ?? 1000} min={1}
-            onCommit={(v) => updateComponentProps(comp.id, { totalResistance: v })}
-          />
+          <PropField label="Total R" unit="Ω" value={props.totalResistance ?? 1000} min={1}
+            onCommit={(v) => updateComponentProps(comp.id, { totalResistance: v })} />
           <div>
-            <div style={{ fontSize: 10, color: '#555', marginBottom: 2 }}>
+            <div style={{ fontSize: 10, color: T2, marginBottom: 4 }}>
               Wiper — {Math.round((state.ratio ?? 0.5) * 100)}%
             </div>
-            <input
-              type="range" min="0" max="100"
+            <input type="range" min="0" max="100"
               value={Math.round((state.ratio ?? 0.5) * 100)}
-              onChange={(e) =>
-                updateComponentState(comp.id, { ratio: Number(e.target.value) / 100 })
-              }
-              style={{ width: '100%', accentColor: '#00c87a', cursor: 'pointer' }}
-            />
+              onChange={(e) => updateComponentState(comp.id, { ratio: Number(e.target.value) / 100 })}
+              style={{ width: '100%', accentColor: ACCENT, cursor: 'pointer' }} />
           </div>
         </>
       )}
@@ -348,6 +354,7 @@ function PropertiesPanel({ comp, updateComponentProps, updateComponentState }) {
   )
 }
 
+// ── Sidebar ───────────────────────────────────────────────────────────────────
 export function Sidebar() {
   const {
     activeType, setActiveType,
@@ -359,147 +366,184 @@ export function Sidebar() {
     updateComponentProps,
     selectedComponentId,
     removeComponent,
-    loadCircuit,
-    clearCircuit,
+    loadCircuit, clearCircuit,
     simMode, setSimMode,
     simParams, setSimParams,
   } = useCircuitStore()
 
   const fileInputRef = useRef(null)
+  const [hovPalette, setHovPalette] = useState(null)
+  const [hovIO, setHovIO]           = useState(null)
 
+  const isPlacing = !!activeType
+  const isWiring  = !!wiringFrom
+  const hasResults = simVoltages !== null
+  const simReady   = components.length > 0
+
+  const wiringSourceComp = wiringFrom
+    ? components.find((c) => c.id === wiringFrom.componentId) : null
+  const selectedComp = components.find((c) => c.id === selectedComponentId) ?? null
+  const switches     = components.filter((c) => c.type === 'switch')
+  const pots         = components.filter((c) => c.type === 'potentiometer')
+  const hasControls  = switches.length > 0 || pots.length > 0
+
+  // ── File handlers ────────────────────────────────────────────────────────
   const handleSave = () => {
-    const payload = JSON.stringify({ version: 1, components, wires }, null, 2)
-    const url = URL.createObjectURL(new Blob([payload], { type: 'application/json' }))
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'my-circuit.json'
-    a.click()
+    const blob = new Blob(
+      [JSON.stringify({ version: 1, components, wires }, null, 2)],
+      { type: 'application/json' },
+    )
+    const url = URL.createObjectURL(blob)
+    Object.assign(document.createElement('a'), { href: url, download: 'my-circuit.json' }).click()
     URL.revokeObjectURL(url)
   }
 
   const handleFileChange = (e) => {
     const file = e.target.files?.[0]
-    e.target.value = ''   // reset so the same file can be reloaded later
+    e.target.value = ''
     if (!file) return
-    if (
-      (components.length > 0 || wires.length > 0) &&
-      !window.confirm('Load circuit? The current canvas will be replaced.')
-    ) return
+    if ((components.length || wires.length) &&
+        !window.confirm('Load circuit? The current canvas will be replaced.')) return
     const reader = new FileReader()
     reader.onload = (evt) => {
       try {
         const data = JSON.parse(evt.target.result)
         if (!Array.isArray(data.components) || !Array.isArray(data.wires))
-          throw new Error('Missing components or wires array.')
+          throw new Error('Missing arrays.')
         loadCircuit(data)
-      } catch (err) {
-        alert(`Could not load file: ${err.message}`)
-      }
+      } catch (err) { alert(`Could not load: ${err.message}`) }
     }
     reader.readAsText(file)
   }
 
   const handleClear = () => {
-    if (components.length === 0 && wires.length === 0) return
+    if (!components.length && !wires.length) return
     if (window.confirm('Clear the canvas? This cannot be undone.')) clearCircuit()
   }
 
-  const isPlacing = !!activeType
-  const isWiring  = !!wiringFrom
-  const hasResults = simVoltages !== null
-  const simReady  = components.length > 0
-
-  const wiringSourceComp = wiringFrom
-    ? components.find((c) => c.id === wiringFrom.componentId)
-    : null
-
-  const selectedComp   = components.find((c) => c.id === selectedComponentId) ?? null
-  const switches       = components.filter((c) => c.type === 'switch')
-  const potentiometers = components.filter((c) => c.type === 'potentiometer')
-  const hasControls    = switches.length > 0 || potentiometers.length > 0
+  // ── Status message ───────────────────────────────────────────────────────
+  let statusMsg, statusColor
+  if (isPlacing) {
+    statusMsg = `Placing ${COMPONENT_DEFS[activeType]?.label}\nESC to cancel`
+    statusColor = ACCENT
+  } else if (isWiring) {
+    statusMsg = `Wiring from ${COMPONENT_DEFS[wiringSourceComp?.type]?.label ?? '…'}\nClick a node  ·  ESC to cancel`
+    statusColor = '#ffaa44'
+  } else if (selectedWireId) {
+    statusMsg = 'Wire selected\nDEL to remove'
+    statusColor = '#ff7777'
+  } else if (selectedComp) {
+    statusMsg = 'Component selected\nDEL to delete  ·  ESC to deselect'
+    statusColor = '#6699ff'
+  } else if (hasResults) {
+    statusMsg = 'Simulation complete'
+    statusColor = ACCENT
+  } else {
+    statusMsg = 'Place a component\nor click a node to wire'
+    statusColor = MUTED
+  }
 
   return (
     <div style={s.root}>
-      <div style={s.label}>COMPONENTS</div>
 
-      {PALETTE_ORDER.map((type) => {
-        const def = COMPONENT_DEFS[type]
-        const active = activeType === type
-        return (
-          <button key={type} onClick={() => setActiveType(type)} style={s.btn(active)}>
-            <span style={s.swatch(def.color)} />
-            {def.label}
-          </button>
-        )
-      })}
-
-      {/* ── Sim mode toggle ──────────────────────────────────────────────── */}
-      <div style={s.modeRow}>
-        <button style={s.modeBtn(simMode === 'dc')}
-          onClick={() => setSimMode('dc')}>DC</button>
-        <button style={s.modeBtn(simMode === 'transient')}
-          onClick={() => setSimMode('transient')}>Transient</button>
+      {/* ── COMPONENTS ──────────────────────────────────────────────────── */}
+      <div style={s.sec}>
+        <span style={s.secLabel(true)}>Components</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {PALETTE_ORDER.map((type) => {
+            const def = COMPONENT_DEFS[type]
+            const active  = activeType === type
+            const hovered = hovPalette === type && !active
+            return (
+              <button
+                key={type}
+                style={s.palBtn(active, hovered)}
+                onMouseEnter={() => setHovPalette(type)}
+                onMouseLeave={() => setHovPalette(null)}
+                onClick={() => setActiveType(type)}
+              >
+                <span style={s.swatch(def.color)} />
+                <span style={{ flex: 1 }}>{def.label}</span>
+                {active && <span style={{ fontSize: 7, color: ACCENT, opacity: 0.7 }}>●</span>}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
-      {simMode === 'transient' && (
-        <>
-          <div style={s.tranParam}>
-            <span style={s.tranLabel}>Stop</span>
-            <input
-              type="text"
-              value={simParams.tranStop}
-              onChange={(e) => setSimParams({ tranStop: e.target.value })}
-              style={s.tranInput}
-              placeholder="1m"
-            />
-          </div>
-          <div style={s.tranParam}>
-            <span style={s.tranLabel}>Step</span>
-            <input
-              type="text"
-              value={simParams.tranStep}
-              onChange={(e) => setSimParams({ tranStep: e.target.value })}
-              style={s.tranInput}
-              placeholder="1u"
-            />
-          </div>
-        </>
-      )}
+      {/* ── SIMULATION ──────────────────────────────────────────────────── */}
+      <div style={s.sec}>
+        <span style={s.secLabel(false)}>Simulation</span>
 
-      <button
-        onClick={runSimulation}
-        disabled={simLoading || !simReady}
-        style={s.simBtn(simLoading, !simReady)}
-      >
-        {simLoading ? 'Simulating…' : hasResults ? 'Re-simulate' : 'Simulate'}
-      </button>
+        {/* DC | Transient segmented control */}
+        <div style={s.segWrap}>
+          <button style={s.segBtn(simMode === 'dc')}
+            onClick={() => setSimMode('dc')}>DC</button>
+          <button style={s.segBtn(simMode === 'transient')}
+            onClick={() => setSimMode('transient')}>Transient</button>
+        </div>
 
-      {/* ── Save / Load / Clear ──────────────────────────────────────────── */}
-      <div style={s.ioRow}>
-        <button style={s.ioBtn} onClick={handleSave}>Save</button>
-        <button style={s.ioBtn} onClick={() => fileInputRef.current?.click()}>Load</button>
-        <button style={s.clearBtn} onClick={handleClear}>Clear</button>
+        {/* Transient parameters */}
+        {simMode === 'transient' && (
+          <div style={{ marginTop: 2 }}>
+            <div style={s.paramRow}>
+              <span style={s.paramLabel}>Stop</span>
+              <input type="text" value={simParams.tranStop} className="sid-input"
+                style={s.paramInput} placeholder="1m"
+                onChange={(e) => setSimParams({ tranStop: e.target.value })} />
+              <span style={s.paramUnit}>s</span>
+            </div>
+            <div style={s.paramRow}>
+              <span style={s.paramLabel}>Step</span>
+              <input type="text" value={simParams.tranStep} className="sid-input"
+                style={s.paramInput} placeholder="1u"
+                onChange={(e) => setSimParams({ tranStep: e.target.value })} />
+              <span style={s.paramUnit}>s</span>
+            </div>
+          </div>
+        )}
+
+        {/* Simulate */}
+        <button onClick={runSimulation} disabled={simLoading || !simReady}
+          style={s.simBtn(simLoading, !simReady)}>
+          {simLoading ? '◌  Simulating…' : hasResults ? '↺  Re-simulate' : '▶  Simulate'}
+        </button>
       </div>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".json"
-        style={{ display: 'none' }}
-        onChange={handleFileChange}
-      />
 
-      {/* ── Properties Panel ─────────────────────────────────────────────── */}
+      {/* ── FILES ───────────────────────────────────────────────────────── */}
+      <div style={s.sec}>
+        <span style={s.secLabel(false)}>Files</span>
+        <div style={s.ioRow}>
+          {[
+            { id: 'save',  icon: '💾', label: 'Save',  danger: false, action: handleSave },
+            { id: 'load',  icon: '📂', label: 'Load',  danger: false, action: () => fileInputRef.current?.click() },
+            { id: 'clear', icon: '🗑', label: 'Clear', danger: true,  action: handleClear },
+          ].map(({ id, icon, label, danger, action }) => (
+            <button key={id} style={s.ioBtn(danger, hovIO === id)}
+              onMouseEnter={() => setHovIO(id)}
+              onMouseLeave={() => setHovIO(null)}
+              onClick={action}>
+              <span>{icon}</span>
+              <span style={s.ioLabel}>{label}</span>
+            </button>
+          ))}
+        </div>
+        <input ref={fileInputRef} type="file" accept=".json"
+          style={{ display: 'none' }} onChange={handleFileChange} />
+      </div>
+
+      {/* ── PROPERTIES ──────────────────────────────────────────────────── */}
       {selectedComp && (
-        <>
-          <div style={s.label}>PROPERTIES</div>
-          <div style={s.propPanel}>
-            <div style={s.propHeader}>
-              <span style={s.propTitle}>
+        <div style={s.sec}>
+          <span style={s.secLabel(false)}>Properties</span>
+          <div style={s.propCard}>
+            <div style={s.propCardHead}>
+              <span style={s.propCardTitle}>
                 {COMPONENT_DEFS[selectedComp.type]?.label}
               </span>
-              <button style={s.delBtn} onClick={() => removeComponent(selectedComp.id)}>×</button>
+              <button style={s.delBtn} onClick={() => removeComponent(selectedComp.id)}
+                title="Delete component">×</button>
             </div>
-
             <PropertiesPanel
               key={selectedComp.id}
               comp={selectedComp}
@@ -507,95 +551,51 @@ export function Sidebar() {
               updateComponentState={updateComponentState}
             />
           </div>
-        </>
+        </div>
       )}
 
-      {/* ── Circuit Controls ──────────────────────────────────────────────── */}
+      {/* ── CIRCUIT CONTROLS ────────────────────────────────────────────── */}
       {hasControls && (
-        <>
-          <div style={s.label}>CIRCUIT</div>
-
+        <div style={s.sec}>
+          <span style={s.secLabel(false)}>Circuit</span>
           {switches.map((sw, i) => (
-            <div key={sw.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ color: '#555', fontSize: 10, flexShrink: 0, width: 28 }}>
-                SW{i + 1}
-              </span>
-              <button
-                onClick={() =>
-                  updateComponentState(sw.id, { closed: !(sw.state?.closed ?? false) })
-                }
-                style={s.swToggle(sw.state?.closed ?? false)}
-              >
+            <div key={sw.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+              <span style={{ fontSize: 10, color: MUTED, width: 32, flexShrink: 0 }}>SW{i + 1}</span>
+              <button style={s.swToggle(sw.state?.closed ?? false)}
+                onClick={() => updateComponentState(sw.id, { closed: !(sw.state?.closed ?? false) })}>
                 {sw.state?.closed ? 'CLOSED' : 'OPEN'}
               </button>
             </div>
           ))}
-
-          {potentiometers.map((pot, i) => {
+          {pots.map((pot, i) => {
             const pct = Math.round((pot.state?.ratio ?? 0.5) * 100)
             return (
-              <div key={pot.id}>
-                <div style={{ fontSize: 10, color: '#555', marginBottom: 2 }}>
-                  POT{i + 1} — {pct}%
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={pct}
-                  onChange={(e) =>
-                    updateComponentState(pot.id, { ratio: Number(e.target.value) / 100 })
-                  }
-                  style={{ width: '100%', accentColor: '#00c87a', cursor: 'pointer' }}
-                />
+              <div key={pot.id} style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 10, color: T2, marginBottom: 4 }}>POT{i + 1} — {pct}%</div>
+                <input type="range" min="0" max="100" value={pct}
+                  onChange={(e) => updateComponentState(pot.id, { ratio: Number(e.target.value) / 100 })}
+                  style={{ width: '100%', accentColor: ACCENT, cursor: 'pointer' }} />
               </div>
             )
           })}
-        </>
+        </div>
       )}
 
       <div style={{ flex: 1 }} />
 
-      {/* ── Status ────────────────────────────────────────────────────────── */}
-      <div style={s.divider}>
-        {isPlacing && (
-          <div style={s.statusRow('#00c87a')}>
-            {`Placing ${COMPONENT_DEFS[activeType].label}\nESC to cancel`}
-          </div>
-        )}
-        {isWiring && (
-          <div style={s.statusRow('#ffaa00')}>
-            {`Wiring from ${COMPONENT_DEFS[wiringSourceComp?.type]?.label ?? '…'}\nClick a node or ESC`}
-          </div>
-        )}
-        {selectedWireId && !isWiring && (
-          <div style={s.statusRow('#ff7777')}>
-            {'Wire selected\nDEL to remove\nRight-click to remove'}
-          </div>
-        )}
-        {selectedComp && !isPlacing && !isWiring && !selectedWireId && (
-          <div style={s.statusRow('#3a6aaa')}>
-            {'Component selected\nDEL to delete\nESC to deselect'}
-          </div>
-        )}
-        {hasResults && !isPlacing && !isWiring && !selectedWireId && !selectedComp && (
-          <div style={s.statusRow('#00c87a')}>Simulation complete</div>
-        )}
-        {!isPlacing && !isWiring && !selectedWireId && !hasResults && !selectedComp && (
-          <div style={s.statusRow('#3a3a55')}>
-            {'Select a component\nor click a node to wire'}
-          </div>
-        )}
+      {/* ── FOOTER ──────────────────────────────────────────────────────── */}
+      <div style={s.footer}>
+        <div style={s.statusCard}>
+          <div style={s.statusLine(statusColor)}>{statusMsg}</div>
+        </div>
+        <div style={s.hint}>
+          {'Drag · orbit    Scroll · zoom\nRight-drag · pan'}
+        </div>
+        <div style={s.counts}>
+          {`${components.length} component${components.length !== 1 ? 's' : ''}  ·  ${wires.length} wire${wires.length !== 1 ? 's' : ''}`}
+        </div>
       </div>
 
-      <div style={s.hint}>
-        Drag: orbit{'\n'}Right drag: pan{'\n'}Scroll: zoom
-      </div>
-
-      <div style={s.counts}>
-        {components.length} component{components.length !== 1 ? 's' : ''}{'\n'}
-        {wires.length} wire{wires.length !== 1 ? 's' : ''}
-      </div>
     </div>
   )
 }

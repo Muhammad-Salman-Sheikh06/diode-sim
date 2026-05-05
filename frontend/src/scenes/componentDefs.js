@@ -84,7 +84,7 @@ export const COMPONENT_DEFS = {
     defaultProps: { voltage: 5 },
     nodes: [
       { id: '+', label: 'Positive', localPos: [0,  0.65, 0] }, // world y = 1.60
-      { id: '-', label: 'Negative', localPos: [0, -0.55, 0] }, // world y = 0.40
+      { id: '-', label: 'Negative', localPos: [0, -0.65, 0] }, // world y = 0.30 — below cap so node sphere is unobstructed
     ],
   },
 
@@ -94,9 +94,9 @@ export const COMPONENT_DEFS = {
     color: '#545454',
     geometry: 'cone',
     args: [0.4, 0.5, 8],
-    yOffset: 0.35,
+    yOffset: 0.30,   // lowered so bottom bar rests on the grid surface
     nodes: [
-      { id: 'GND', label: 'Ground', localPos: [0, 0.30, 0] }, // world y = 0.65
+      { id: 'GND', label: 'Ground', localPos: [0, 0.30, 0] }, // world y = 0.60
     ],
   },
 

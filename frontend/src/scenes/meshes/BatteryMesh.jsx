@@ -1,5 +1,5 @@
 // AA-style battery: white label body, brass top cap, + nub, silver bottom cap
-// yOffset=0.95  nodes: + at localY=+0.65,  – at localY=–0.55
+// yOffset=0.95  nodes: + at localY=+0.65,  – at localY=–0.65
 export function BatteryMesh({ matRef, opacity }) {
   const t = opacity < 1
   return (
@@ -37,10 +37,16 @@ export function BatteryMesh({ matRef, opacity }) {
         <meshStandardMaterial color="#c8a010" metalness={0.9} roughness={0.2} transparent={t} opacity={opacity} />
       </mesh>
 
-      {/* Silver bottom cap (y=–0.50 → –0.58, node at –0.55) */}
+      {/* Silver bottom cap (y=–0.50 → –0.58) */}
       <mesh position={[0, -0.54, 0]}>
         <cylinderGeometry args={[0.30, 0.30, 0.08, 16]} />
         <meshStandardMaterial color="#909098" metalness={0.7} roughness={0.3} transparent={t} opacity={opacity} />
+      </mesh>
+
+      {/* – terminal pin: bridges cap bottom (–0.58) to node (–0.65) so the node sphere is exposed */}
+      <mesh position={[0, -0.615, 0]}>
+        <cylinderGeometry args={[0.06, 0.06, 0.07, 10]} />
+        <meshStandardMaterial color="#707078" metalness={0.8} roughness={0.25} transparent={t} opacity={opacity} />
       </mesh>
     </>
   )
