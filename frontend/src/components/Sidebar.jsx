@@ -97,6 +97,47 @@ const s = {
     color: '#2a2a40',
     marginTop: 2,
   },
+  modeRow: {
+    display: 'flex',
+    gap: 4,
+    marginTop: 2,
+  },
+  modeBtn: (active) => ({
+    flex: 1,
+    padding: '5px 0',
+    background: active ? '#0d2e20' : '#13131c',
+    border: `1px solid ${active ? '#00c87a' : '#1e1e30'}`,
+    borderRadius: 4,
+    color: active ? '#00c87a' : '#555',
+    cursor: 'pointer',
+    fontSize: 10,
+    fontFamily: "'Courier New', monospace",
+    letterSpacing: 1,
+  }),
+  tranParam: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 3,
+  },
+  tranInput: {
+    flex: 1,
+    background: '#0d1520',
+    border: '1px solid #1e3050',
+    borderRadius: 3,
+    color: '#7ab8ff',
+    fontSize: 11,
+    padding: '2px 5px',
+    fontFamily: "'Courier New', monospace",
+    outline: 'none',
+    minWidth: 0,
+  },
+  tranLabel: {
+    fontSize: 10,
+    color: '#555',
+    flexShrink: 0,
+    width: 34,
+  },
   ioRow: {
     display: 'flex',
     gap: 4,
@@ -320,6 +361,8 @@ export function Sidebar() {
     removeComponent,
     loadCircuit,
     clearCircuit,
+    simMode, setSimMode,
+    simParams, setSimParams,
   } = useCircuitStore()
 
   const fileInputRef = useRef(null)
@@ -389,6 +432,39 @@ export function Sidebar() {
           </button>
         )
       })}
+
+      {/* ── Sim mode toggle ──────────────────────────────────────────────── */}
+      <div style={s.modeRow}>
+        <button style={s.modeBtn(simMode === 'dc')}
+          onClick={() => setSimMode('dc')}>DC</button>
+        <button style={s.modeBtn(simMode === 'transient')}
+          onClick={() => setSimMode('transient')}>Transient</button>
+      </div>
+
+      {simMode === 'transient' && (
+        <>
+          <div style={s.tranParam}>
+            <span style={s.tranLabel}>Stop</span>
+            <input
+              type="text"
+              value={simParams.tranStop}
+              onChange={(e) => setSimParams({ tranStop: e.target.value })}
+              style={s.tranInput}
+              placeholder="1m"
+            />
+          </div>
+          <div style={s.tranParam}>
+            <span style={s.tranLabel}>Step</span>
+            <input
+              type="text"
+              value={simParams.tranStep}
+              onChange={(e) => setSimParams({ tranStep: e.target.value })}
+              style={s.tranInput}
+              placeholder="1u"
+            />
+          </div>
+        </>
+      )}
 
       <button
         onClick={runSimulation}

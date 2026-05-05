@@ -9,5 +9,10 @@ router = APIRouter(prefix="/simulate", tags=["simulate"])
 def simulate(payload: CircuitPayload) -> SimulationResponse:
     components = [c.model_dump() for c in payload.components]
     wires      = [w.model_dump() for w in payload.wires]
-    result     = run_simulation(components, wires)
+    result     = run_simulation(
+        components, wires,
+        mode=payload.params.mode,
+        tran_stop=payload.params.tran_stop,
+        tran_step=payload.params.tran_step,
+    )
     return SimulationResponse(**result)

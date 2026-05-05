@@ -13,8 +13,11 @@ export const useCircuitStore = create((set, get) => ({
   selectedComponentId: null,
 
   // Simulation state
-  simVoltages: null,   // { 'compId:nodeId': volts }
-  simCurrents: null,   // { compId: amps }
+  simMode: 'dc',                          // 'dc' | 'transient'
+  simParams: { tranStop: '1m', tranStep: '1u' },
+  simVoltages: null,   // { 'compId:nodeId': volts }  — DC
+  simCurrents: null,   // { compId: amps }             — DC
+  simTransient: null,  // { time, nets, nodes }         — transient
   simLoading: false,
   simError: null,
 
@@ -121,15 +124,26 @@ export const useCircuitStore = create((set, get) => ({
       simCurrents: null,
     })),
 
+  setSimMode: (mode) => set({ simMode: mode, simTransient: null }),
+  setSimParams: (patch) => set((s) => ({ simParams: { ...s.simParams, ...patch } })),
+
   // ── Simulation ────────────────────────────────────────────────────────────
   runSimulation: async () => {
     set({ simLoading: true, simError: null })
-    const { components, wires } = get()
+    const { components, wires, simMode, simParams } = get()
     try {
       const res = await fetch('/api/simulate/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ components, wires }),
+        body: JSON.stringify({
+          components,
+          wires,
+          params: {
+            mode: simMode,
+            tran_stop: simParams.tranStop,
+            tran_step: simParams.tranStep,
+          },
+        }),
       })
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}))
@@ -137,11 +151,25 @@ export const useCircuitStore = create((set, get) => ({
       }
       const data = await res.json()
       if (data.success) {
-        set({
-          simVoltages: data.nodeVoltages ?? null,
-          simCurrents: data.branchCurrents ?? null,
-          simLoading: false,
-        })
+        if (simMode === 'transient') {
+          set({
+            simTransient: {
+              time:  data.transientTime  ?? [],
+              nets:  data.transientNets  ?? {},
+              nodes: data.transientNodes ?? {},
+            },
+            simVoltages: null,
+            simCurrents: null,
+            simLoading: false,
+          })
+        } else {
+          set({
+            simVoltages:  data.nodeVoltages   ?? null,
+            simCurrents:  data.branchCurrents ?? null,
+            simTransient: null,
+            simLoading:   false,
+          })
+        }
       } else {
         set({ simError: data.error || 'Simulation failed', simLoading: false })
       }

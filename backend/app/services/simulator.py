@@ -81,13 +81,15 @@ def _build_nets(components: list, wires: list) -> Dict[Tuple[str, str], str]:
 # ── Netlist builder ───────────────────────────────────────────────────────────
 
 def _build_netlist(
-    components: list, wires: list
-) -> Tuple[str, Dict, Dict[str, str]]:
+    components: list, wires: list,
+    mode: str = "dc", tran_stop: str = "1m", tran_step: str = "1u",
+) -> Tuple[str, Dict, Dict[str, str], List[str]]:
     """
-    Return (spice_netlist, nets, elem_to_comp).
+    Return (spice_netlist, nets, elem_to_comp, net_names).
 
     elem_to_comp maps lowercase SPICE element names (e.g. 'r1', 'v1') to the
     component ID they originated from, so branch currents can be linked back.
+    net_names is the sorted list of non-ground net names used for voltage prints.
     """
     nets = _build_nets(components, wires)
     type_count: Dict[str, int] = {}
@@ -175,21 +177,107 @@ def _build_netlist(
     v_prints = " ".join(f"v({n})" for n in net_names)
     i_prints = " ".join(f"i({e})" for e in elem_to_comp)
 
-    # Use a .control block so we can print both voltages and branch currents
+    # In transient mode, start each capacitor's + node at 0V so the
+    # charging curve is visible (without this ngspice starts from the
+    # DC operating point where caps are already fully charged → flat lines).
+    has_cap = any(c["type"] == "capacitor" for c in components)
+    if mode == "transient" and has_cap:
+        seen_ic: set = set()
+        for c in components:
+            if c["type"] == "capacitor":
+                plus_net = nets.get((c["id"], "+"), "0")
+                if plus_net != "0" and plus_net not in seen_ic:
+                    lines.append(f".ic v({plus_net})=0\n")
+                    seen_ic.add(plus_net)
+
     lines.append(".control\n")
-    lines.append("op\n")
-    if v_prints:
-        lines.append(f"print {v_prints}\n")
-    if i_prints:
-        lines.append(f"print {i_prints}\n")
+    if mode == "transient":
+        uic = " uic" if has_cap else ""
+        lines.append(f"tran {tran_step} {tran_stop}{uic}\n")
+        if v_prints:
+            lines.append(f"print {v_prints}\n")
+    else:
+        lines.append("op\n")
+        if v_prints:
+            lines.append(f"print {v_prints}\n")
+        if i_prints:
+            lines.append(f"print {i_prints}\n")
     lines.append("exit\n")
     lines.append(".endc\n")
     lines.append(".end\n")
 
-    return "".join(lines), nets, elem_to_comp
+    return "".join(lines), nets, elem_to_comp, net_names
 
 
-# ── Output parser ─────────────────────────────────────────────────────────────
+# ── Output parsers ────────────────────────────────────────────────────────────
+
+def _parse_transient_output(
+    output: str, net_names: List[str],
+) -> Tuple[List[float], Dict[str, List[float]]]:
+    """
+    Parse ngspice transient print table.
+
+    Expected format (from `print v(net1) v(net2)` after `tran`):
+        Index         time       v(net1)       v(net2)
+            0  0.000000e+00  0.000000e+00  5.000000e+00
+            1  1.000000e-06  2.468000e-02  4.975000e+00
+
+    Returns (time_values, {net_name: [v0, v1, …]}).
+    Limits output to 4 000 points via uniform downsampling.
+    """
+    time_vals: List[float] = []
+    col_order: List[str] = []   # net names in column order
+    net_data: Dict[str, List[float]] = {n: [] for n in net_names}
+    in_data = False
+
+    for line in output.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        # ngspice repeats the column header every ~22 rows as a page break;
+        # skip ALL occurrences after the first so they don't stop parsing.
+        if re.match(r"index\s+time", stripped, re.IGNORECASE):
+            if not in_data:
+                # First occurrence — parse column order
+                parts = stripped.split()
+                for h in parts[2:]:
+                    m = re.match(r"v\((\w+)\)", h, re.IGNORECASE)
+                    col_order.append(m.group(1) if m else h)
+                in_data = True
+            # Always skip header lines (first and repeated)
+            continue
+
+        # Skip separator lines (----, ====, etc.)
+        if re.match(r"^[-=\s]+$", stripped):
+            continue
+
+        if not in_data:
+            continue
+
+        parts = stripped.split()
+        # Data rows: index  time  val1  val2 …
+        try:
+            int(parts[0])          # first token must be integer index
+            t = float(parts[1])
+            time_vals.append(t)
+            for j, name in enumerate(col_order):
+                val = float(parts[2 + j]) if (2 + j) < len(parts) else 0.0
+                if name in net_data:
+                    net_data[name].append(val)
+        except (ValueError, IndexError):
+            continue  # skip any non-data lines without stopping
+
+    # Downsample if needed
+    MAX_PTS = 4_000
+    n = len(time_vals)
+    if n > MAX_PTS:
+        step = n // MAX_PTS
+        time_vals = time_vals[::step]
+        net_data = {k: v[::step] for k, v in net_data.items()}
+
+    return time_vals, net_data
+
 
 def _parse_output(
     output: str,
@@ -245,7 +333,10 @@ def _parse_output(
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def run_simulation(components: list, wires: list) -> dict:
+def run_simulation(
+    components: list, wires: list,
+    mode: str = "dc", tran_stop: str = "1m", tran_step: str = "1u",
+) -> dict:
     if not components:
         return {"success": False, "error": "No components in circuit."}
 
@@ -262,7 +353,9 @@ def run_simulation(components: list, wires: list) -> dict:
         }
 
     try:
-        netlist, nets, elem_to_comp = _build_netlist(components, wires)
+        netlist, nets, elem_to_comp, net_names = _build_netlist(
+            components, wires, mode=mode, tran_stop=tran_stop, tran_step=tran_step,
+        )
     except Exception as exc:
         return {"success": False, "error": f"Netlist generation failed: {exc}"}
 
@@ -276,7 +369,7 @@ def run_simulation(components: list, wires: list) -> dict:
         try:
             proc = subprocess.run(
                 ["ngspice", "-b", tmp.name],
-                capture_output=True, text=True, timeout=30,
+                capture_output=True, text=True, timeout=60,
             )
         except FileNotFoundError:
             return {
@@ -287,12 +380,46 @@ def run_simulation(components: list, wires: list) -> dict:
                 ),
             }
         except subprocess.TimeoutExpired:
-            return {"success": False, "error": "ngspice timed out after 30 s."}
+            return {"success": False, "error": "ngspice timed out after 60 s."}
 
         raw = proc.stdout + "\n" + proc.stderr
+
+        # ── Transient mode ────────────────────────────────────────────────────
+        if mode == "transient":
+            time_vals, net_vals = _parse_transient_output(raw, net_names)
+
+            if not time_vals:
+                err = (proc.stderr or proc.stdout or "unknown error")[:600]
+                return {
+                    "success": False,
+                    "error": f"Transient parse failed (ngspice exit {proc.returncode}): {err}",
+                    "netlist": netlist,
+                }
+
+            # One series per unique net (skip ground which is always 0)
+            tran_nets: Dict[str, List[float]] = {
+                n: net_vals[n] for n in net_names if n in net_vals and net_vals[n]
+            }
+
+            # Also map compId:nodeId → net series (for voltage label overlays)
+            tran_nodes: Dict[str, List[float]] = {}
+            for (cid, nid), net_name in nets.items():
+                if net_name == "0":
+                    tran_nodes[f"{cid}:{nid}"] = [0.0] * len(time_vals)
+                elif net_name in tran_nets:
+                    tran_nodes[f"{cid}:{nid}"] = tran_nets[net_name]
+
+            return {
+                "success": True,
+                "transientTime": time_vals,
+                "transientNets": tran_nets,
+                "transientNodes": tran_nodes,
+                "netlist": netlist,
+            }
+
+        # ── DC mode ───────────────────────────────────────────────────────────
         net_voltages, elem_currents = _parse_output(raw)
 
-        # ── Map back to "componentId:nodeId" → voltage ────────────────────────
         node_voltages: Dict[str, float] = {}
         for (cid, nid), net_name in nets.items():
             if net_name == "0":
@@ -300,9 +427,6 @@ def run_simulation(components: list, wires: list) -> dict:
             elif net_name in net_voltages:
                 node_voltages[f"{cid}:{nid}"] = net_voltages[net_name]
 
-        # ── Map branch currents back to component IDs ─────────────────────────
-        # ngspice reports current INTO the positive terminal (or element convention).
-        # We store the absolute value in mA for display.
         branch_currents: Dict[str, float] = {}
         for elem_lower, amps in elem_currents.items():
             if elem_lower in elem_to_comp:
