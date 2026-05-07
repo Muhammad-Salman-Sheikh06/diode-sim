@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useLayoutEffect } from 'react'
 import { useCircuitStore } from '../store/circuitStore'
 import { COMPONENT_DEFS, getNodeWorldPos } from './componentDefs'
 import { NodeVoltageLabel } from './NodeVoltageLabel'
@@ -8,6 +8,15 @@ const NODE_SEGS = 8
 
 function NodeSphere({ worldPos, isSource, isConnected, onNodeClick }) {
   const [hovered, setHovered] = useState(false)
+  const meshRef = useRef()
+
+  // R3F's prop reconciler doesn't reliably update position on already-mounted
+  // meshes — set it imperatively after every render.
+  useLayoutEffect(() => {
+    if (meshRef.current) {
+      meshRef.current.position.set(worldPos[0], worldPos[1], worldPos[2])
+    }
+  })
 
   const color = isSource   ? '#ffaa00'
     : hovered              ? '#00ff88'
@@ -18,6 +27,7 @@ function NodeSphere({ worldPos, isSource, isConnected, onNodeClick }) {
 
   return (
     <mesh
+      ref={meshRef}
       position={worldPos}
       scale={hovered || isSource ? 1.5 : 1}
       onPointerEnter={(e) => { e.stopPropagation(); setHovered(true) }}

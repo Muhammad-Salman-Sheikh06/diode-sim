@@ -11,6 +11,9 @@ import { GroundMesh }      from './meshes/GroundMesh'
 import { TransistorMesh }  from './meshes/TransistorMesh'
 import { PotMesh }         from './meshes/PotMesh'
 import { JunctionMesh }    from './meshes/JunctionMesh'
+import { OpAmpMesh }       from './meshes/OpAmpMesh'
+import { MOSFETMesh }      from './meshes/MOSFETMesh'
+import { InductorMesh }    from './meshes/InductorMesh'
 
 const elerp = (a, b, delta, speed = 4) =>
   MathUtils.lerp(a, b, 1 - Math.exp(-delta * speed))
@@ -37,18 +40,23 @@ function SwitchBodyMesh({ matRef, opacity }) {
 }
 
 const MESH_MAP = {
-  resistor:       ResistorMesh,
-  capacitor:      CapacitorMesh,
-  led:            LEDMesh,
-  voltage_source: BatteryMesh,
-  ground:         GroundMesh,
-  npn_transistor: TransistorMesh,
-  potentiometer:  PotMesh,
-  junction:       JunctionMesh,
-  switch:         SwitchBodyMesh,
+  resistor:        ResistorMesh,
+  capacitor:       CapacitorMesh,
+  led:             LEDMesh,
+  voltage_source:  BatteryMesh,
+  ground:          GroundMesh,
+  npn_transistor:  TransistorMesh,
+  potentiometer:   PotMesh,
+  junction:        JunctionMesh,
+  switch:          SwitchBodyMesh,
+  op_amp:          OpAmpMesh,
+  nmos_transistor: MOSFETMesh,
+  inductor:        InductorMesh,
 }
 
-export const ComponentMesh = memo(function ComponentMesh({ type, position, opacity = 1, id }) {
+// Rotation is handled entirely by the parent <group> in CircuitEditor — this
+// component only positions itself at the correct yOffset above the grid.
+export const ComponentMesh = memo(function ComponentMesh({ type, opacity = 1, id }) {
   const def = COMPONENT_DEFS[type]
   const matRef = useRef()
 
@@ -64,7 +72,6 @@ export const ComponentMesh = memo(function ComponentMesh({ type, position, opaci
         const vk = simVoltages[`${id}:K`] ?? null
         if (va !== null && vk !== null) {
           const vf = va - vk
-          // Open-switch leakage settles LED node to ~1 V; real forward bias ~2 V.
           targetIntensity = vf > 1.5 ? Math.min(vf / 2.0, 1) * 2.4 : 0
         }
       } else {
@@ -76,7 +83,6 @@ export const ComponentMesh = memo(function ComponentMesh({ type, position, opaci
       }
     }
 
-    // Selection highlight overrides the baseline intensity
     if (isSelected) targetIntensity = Math.max(targetIntensity, 0.38)
 
     matRef.current.emissiveIntensity = elerp(
@@ -87,7 +93,6 @@ export const ComponentMesh = memo(function ComponentMesh({ type, position, opaci
   })
 
   if (!def) return null
-  const [x, , z] = position
   const MeshComponent = MESH_MAP[type]
   if (!MeshComponent) return null
 
@@ -100,7 +105,7 @@ export const ComponentMesh = memo(function ComponentMesh({ type, position, opaci
   }
 
   return (
-    <group position={[x, def.yOffset, z]} onClick={handleClick}>
+    <group position={[0, def.yOffset, 0]} onClick={handleClick}>
       <MeshComponent matRef={matRef} opacity={opacity} />
     </group>
   )

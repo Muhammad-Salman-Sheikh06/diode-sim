@@ -7,6 +7,7 @@ const uid = () => `c${++_seq}`
 export const useCircuitStore = create((set, get) => ({
   components: [],
   activeType: null,
+  ghostRotation: 0,
   wires: [],
   wiringFrom: null,
   selectedWireId: null,
@@ -23,9 +24,15 @@ export const useCircuitStore = create((set, get) => ({
 
   // ── Placement ─────────────────────────────────────────────────────────────
   setActiveType: (type) =>
-    set((s) => ({ activeType: s.activeType === type ? null : type, selectedComponentId: null })),
+    set((s) => ({
+      activeType: s.activeType === type ? null : type,
+      selectedComponentId: null,
+      ghostRotation: 0,
+    })),
 
-  clearActiveType: () => set({ activeType: null }),
+  clearActiveType: () => set({ activeType: null, ghostRotation: 0 }),
+
+  rotateGhost: () => set((s) => ({ ghostRotation: (s.ghostRotation + 90) % 360 })),
 
   placeComponent: (type, position) =>
     set((s) => ({
@@ -35,6 +42,7 @@ export const useCircuitStore = create((set, get) => ({
           id: uid(),
           type,
           position,
+          rotation: s.ghostRotation,
           state: { ...(COMPONENT_DEFS[type]?.defaultState ?? {}) },
           props: { ...(COMPONENT_DEFS[type]?.defaultProps ?? {}) },
         },
@@ -57,6 +65,15 @@ export const useCircuitStore = create((set, get) => ({
 
   selectComponent: (id) => set({ selectedComponentId: id }),
   deselectComponent: () => set({ selectedComponentId: null }),
+
+  rotateComponent: (id) =>
+    set((s) => ({
+      components: s.components.map((c) =>
+        c.id === id ? { ...c, rotation: ((c.rotation ?? 0) + 90) % 360 } : c
+      ),
+      simVoltages: null,
+      simCurrents: null,
+    })),
 
   updateComponentState: (id, patch) =>
     set((s) => ({
@@ -186,7 +203,7 @@ export const useCircuitStore = create((set, get) => ({
     set({
       components: [], wires: [],
       simVoltages: null, simCurrents: null, simError: null, simLoading: false,
-      activeType: null, wiringFrom: null, selectedWireId: null, selectedComponentId: null,
+      activeType: null, ghostRotation: 0, wiringFrom: null, selectedWireId: null, selectedComponentId: null,
     })
   },
 

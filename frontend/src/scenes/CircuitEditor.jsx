@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { Grid, OrbitControls, Line } from '@react-three/drei'
 import { useCircuitStore } from '../store/circuitStore'
@@ -46,11 +46,32 @@ function Scene() {
   const {
     components, wires,
     activeType, wiringFrom,
+    ghostRotation,
     placeComponent, cancelWiring, deselectComponent,
   } = useCircuitStore()
 
   const [ghostPos, setGhostPos] = useState(null)
   const [mouseWorldPos, setMouseWorldPos] = useState(null)
+
+  // Refs for imperative rotation — R3F's prop reconciler doesn't reliably
+  // apply rotation array changes to already-mounted groups.
+  const groupRefs   = useRef({})
+  const ghostGrpRef = useRef()
+
+  // Sync placed-component rotations directly onto their Three.js groups.
+  useEffect(() => {
+    components.forEach((c) => {
+      const grp = groupRefs.current[c.id]
+      if (grp) grp.rotation.y = -((c.rotation ?? 0) * Math.PI / 180)
+    })
+  }, [components])
+
+  // Sync ghost rotation.
+  useEffect(() => {
+    if (ghostGrpRef.current) {
+      ghostGrpRef.current.rotation.y = -(ghostRotation * Math.PI / 180)
+    }
+  }, [ghostRotation])
 
   const isPlacing = !!activeType
   const isWiring  = !!wiringFrom
@@ -66,7 +87,7 @@ function Scene() {
     if (isPlacing && ghostPos) {
       placeComponent(activeType, ghostPos)
     } else if (isWiring) {
-      cancelWiring() // clicked empty grid → cancel wiring
+      cancelWiring()
     }
   }, [isPlacing, isWiring, activeType, ghostPos, placeComponent, cancelWiring])
 
@@ -114,19 +135,30 @@ function Scene() {
         <WireComponent key={w.id} wire={w} />
       ))}
 
-      {/* Placed components with their terminal nodes */}
+      {/* Placed components — ref callback owns imperative rotation */}
       {components.map((c) => (
         <group key={c.id}>
-          {c.type === 'switch'
-            ? <SwitchMesh component={c} />
-            : <ComponentMesh type={c.type} position={c.position} id={c.id} />}
+          <group
+            position={[c.position[0], 0, c.position[2]]}
+            ref={(el) => { groupRefs.current[c.id] = el }}
+          >
+            {c.type === 'switch'
+              ? <SwitchMesh component={c} />
+              : <ComponentMesh type={c.type} id={c.id} />}
+          </group>
+          {/* Nodes at computed world positions — must stay outside the rotating group */}
           <ComponentNodes component={c} />
         </group>
       ))}
 
       {/* Placement ghost */}
       {isPlacing && ghostPos && (
-        <ComponentMesh type={activeType} position={ghostPos} opacity={0.38} />
+        <group
+          ref={ghostGrpRef}
+          position={[ghostPos[0], 0, ghostPos[2]]}
+        >
+          <ComponentMesh type={activeType} opacity={0.38} />
+        </group>
       )}
 
       {/* Wire drag preview */}
@@ -166,6 +198,12 @@ export function CircuitEditor() {
         if (wiringFrom) cancelWiring()
         else if (activeType) clearActiveType()
         else deselectComponent()
+      }
+      if (e.key === 'r' || e.key === 'R') {
+        const { activeType, selectedComponentId, rotateGhost, rotateComponent } =
+          useCircuitStore.getState()
+        if (activeType) { e.preventDefault(); rotateGhost() }
+        else if (selectedComponentId) { e.preventDefault(); rotateComponent(selectedComponentId) }
       }
     }
     window.addEventListener('keydown', onKey)

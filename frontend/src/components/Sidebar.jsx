@@ -308,6 +308,7 @@ function PropertiesPanel({ comp, updateComponentProps, updateComponentState }) {
   const { type, props = {}, state = {} } = comp
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <PropField label="Rotation" unit="°" value={comp.rotation ?? 0} readOnly />
       {type === 'resistor' && (
         <PropField label="Resistance" unit="Ω" value={props.resistance ?? 1000} min={0.001}
           onCommit={(v) => updateComponentProps(comp.id, { resistance: v })} />
@@ -326,6 +327,18 @@ function PropertiesPanel({ comp, updateComponentProps, updateComponentState }) {
       {type === 'npn_transistor' && (
         <PropField label="hFE (gain)" unit="" value={props.hfe ?? 100} min={1} integer
           onCommit={(v) => updateComponentProps(comp.id, { hfe: v })} />
+      )}
+      {type === 'op_amp' && (
+        <PropField label="Open-loop gain" unit="" value={props.gain ?? 100000} min={1}
+          onCommit={(v) => updateComponentProps(comp.id, { gain: v })} />
+      )}
+      {type === 'nmos_transistor' && (
+        <PropField label="Vth" unit="V" value={props.vth ?? 2.0} min={0.1}
+          onCommit={(v) => updateComponentProps(comp.id, { vth: v })} />
+      )}
+      {type === 'inductor' && (
+        <PropField label="Inductance" unit="mH" value={props.inductance ?? 10} min={0.001}
+          onCommit={(v) => updateComponentProps(comp.id, { inductance: v })} />
       )}
       {type === 'switch' && (
         <div style={{ display: 'flex', gap: 6 }}>
@@ -424,7 +437,7 @@ export function Sidebar() {
   // ── Status message ───────────────────────────────────────────────────────
   let statusMsg, statusColor
   if (isPlacing) {
-    statusMsg = `Placing ${COMPONENT_DEFS[activeType]?.label}\nESC to cancel`
+    statusMsg = `Placing ${COMPONENT_DEFS[activeType]?.label}\nR to rotate  ·  ESC to cancel`
     statusColor = ACCENT
   } else if (isWiring) {
     statusMsg = `Wiring from ${COMPONENT_DEFS[wiringSourceComp?.type]?.label ?? '…'}\nClick a node  ·  ESC to cancel`
@@ -433,7 +446,7 @@ export function Sidebar() {
     statusMsg = 'Wire selected\nDEL to remove'
     statusColor = '#ff7777'
   } else if (selectedComp) {
-    statusMsg = 'Component selected\nDEL to delete  ·  ESC to deselect'
+    statusMsg = 'Component selected\nR to rotate  ·  DEL to delete  ·  ESC'
     statusColor = '#6699ff'
   } else if (hasResults) {
     statusMsg = 'Simulation complete'

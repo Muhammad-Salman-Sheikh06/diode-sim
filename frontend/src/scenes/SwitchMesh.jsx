@@ -14,7 +14,6 @@ export function SwitchMesh({ component }) {
   const isSelected          = useCircuitStore((s) => s.selectedComponentId === component.id)
 
   const closed = component.state?.closed ?? false
-  const [x, , z] = component.position
   const { yOffset } = COMPONENT_DEFS.switch
 
   const handleClick = (e) => {
@@ -25,7 +24,7 @@ export function SwitchMesh({ component }) {
   }
 
   return (
-    <group position={[x, yOffset, z]} onClick={handleClick}>
+    <group position={[0, yOffset, 0]} onClick={handleClick}>
       {/* Housing base spanning full width */}
       <mesh position={[0, -0.04, 0]}>
         <boxGeometry args={[0.88, 0.06, 0.26]} />

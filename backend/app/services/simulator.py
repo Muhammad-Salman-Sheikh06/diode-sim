@@ -16,15 +16,18 @@ from typing import Dict, List, Tuple
 
 # Terminal IDs per component type — must match frontend componentDefs.js
 _COMPONENT_NODES: Dict[str, List[str]] = {
-    "resistor":       ["A", "B"],
-    "capacitor":      ["+", "-"],
-    "led":            ["A", "K"],
-    "voltage_source": ["+", "-"],
-    "ground":         ["GND"],
-    "npn_transistor": ["B", "C", "E"],
-    "switch":         ["A", "B"],
-    "potentiometer":  ["A", "W", "B"],
-    "junction":       ["J"],
+    "resistor":        ["A", "B"],
+    "capacitor":       ["+", "-"],
+    "led":             ["A", "K"],
+    "voltage_source":  ["+", "-"],
+    "ground":          ["GND"],
+    "npn_transistor":  ["B", "C", "E"],
+    "switch":          ["A", "B"],
+    "potentiometer":   ["A", "W", "B"],
+    "junction":        ["J"],
+    "op_amp":          ["IN+", "IN-", "OUT", "V+", "V-"],
+    "nmos_transistor": ["G", "D", "S"],
+    "inductor":        ["A", "B"],
 }
 
 
@@ -97,7 +100,8 @@ def _build_netlist(
     lines = ["* diode-sim generated netlist\n"]
 
     has_led = any(c["type"] == "led" for c in components)
-    bjt_model_lines: list = []  # per-transistor .model lines (supports different hFE values)
+    bjt_model_lines: list = []    # per-instance .model for NPN (different hFE per device)
+    mosfet_model_lines: list = [] # per-instance .model for NMOS (different Vth per device)
 
     for c in components:
         t = c["type"]
@@ -164,6 +168,33 @@ def _build_netlist(
             elem_to_comp[ea.lower()] = cid
             elem_to_comp[eb.lower()] = cid
 
+        elif t == "op_amp":
+            # Ideal op-amp: 1 TΩ differential input, VCVS output
+            gain = float(props.get("gain", 100000))
+            rin_elem = f"Rin_oa{idx}"
+            lines.append(f"{rin_elem} {net('IN+')} {net('IN-')} 1T\n")
+            elem = f"E{idx}"
+            lines.append(f"{elem} {net('OUT')} 0 {net('IN+')} {net('IN-')} {gain:.6g}\n")
+            elem_to_comp[rin_elem.lower()] = cid
+            elem_to_comp[elem.lower()] = cid
+
+        elif t == "nmos_transistor":
+            vth = max(0.1, float(props.get("vth", 2.0)))
+            model_name = f"NMOS_M{idx}"
+            elem = f"M{idx}"
+            # M: Drain Gate Source Body Model
+            lines.append(f"{elem} {net('D')} {net('G')} {net('S')} {net('S')} {model_name}\n")
+            mosfet_model_lines.append(
+                f".model {model_name} NMOS (Level=1 Vto={vth:.3g} Kp=120e-6 W=100e-6 L=2e-6)\n"
+            )
+            # Note: ngspice reports drain current as id(M1), not i(M1); skip elem_to_comp
+
+        elif t == "inductor":
+            inductance_h = max(1e-9, float(props.get("inductance", 10))) * 1e-3  # mH → H
+            elem = f"L{idx}"
+            lines.append(f"{elem} {net('A')} {net('B')} {inductance_h:.6g} IC=0\n")
+            elem_to_comp[elem.lower()] = cid
+
         elif t in ("ground", "junction"):
             pass  # pure net reference; no SPICE element needed
 
@@ -171,6 +202,8 @@ def _build_netlist(
         lines.append(".model DLED D(Is=1e-20 N=1.5)\n")
     for bjt_line in bjt_model_lines:
         lines.append(bjt_line)
+    for mos_line in mosfet_model_lines:
+        lines.append(mos_line)
 
     # Collect non-ground net names for voltage prints
     net_names = sorted({n for n in nets.values() if n != "0"})
@@ -181,6 +214,7 @@ def _build_netlist(
     # charging curve is visible (without this ngspice starts from the
     # DC operating point where caps are already fully charged → flat lines).
     has_cap = any(c["type"] == "capacitor" for c in components)
+    has_ind = any(c["type"] == "inductor" for c in components)
     if mode == "transient" and has_cap:
         seen_ic: set = set()
         for c in components:
@@ -192,7 +226,7 @@ def _build_netlist(
 
     lines.append(".control\n")
     if mode == "transient":
-        uic = " uic" if has_cap else ""
+        uic = " uic" if (has_cap or has_ind) else ""
         lines.append(f"tran {tran_step} {tran_stop}{uic}\n")
         if v_prints:
             lines.append(f"print {v_prints}\n")

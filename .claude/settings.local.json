@@ -5,7 +5,9 @@
       "Bash(docker-compose up *)",
       "Bash(docker-compose down *)",
       "Bash(docker-compose exec *)",
-      "Bash(docker-compose logs *)"
+      "Bash(docker-compose logs *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }

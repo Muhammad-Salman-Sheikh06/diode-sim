@@ -123,11 +123,55 @@ export const COMPONENT_DEFS = {
       { id: 'J', label: 'Junction', localPos: [0, 0.08, 0] }, // world y = 0.23
     ],
   },
+
+  // ── New Stage 6d components ────────────────────────────────────────────────
+  op_amp: {
+    label: 'Op-Amp',
+    color: '#7a4aaa',
+    geometry: 'box',
+    args: [1.4, 1.2, 0.4],
+    yOffset: 0.75,
+    defaultProps: { gain: 100000 },
+    nodes: [
+      { id: 'IN+', label: 'Non-Inverting', localPos: [-0.55,  0.20, 0] }, // world y = 0.95
+      { id: 'IN-', label: 'Inverting',     localPos: [-0.55, -0.20, 0] }, // world y = 0.55
+      { id: 'OUT', label: 'Output',        localPos: [ 0.75,  0,    0] }, // world y = 0.75
+      { id: 'V+',  label: 'V+ Supply',     localPos: [ 0.10,  0.52, 0] }, // world y = 1.27
+      { id: 'V-',  label: 'V− Supply',     localPos: [ 0.10, -0.52, 0] }, // world y = 0.23
+    ],
+  },
+
+  nmos_transistor: {
+    label: 'N-MOSFET',
+    color: '#2a5a3a',
+    geometry: 'box',
+    args: [0.6, 0.8, 0.3],
+    yOffset: 0.5,
+    defaultProps: { vth: 2.0 },
+    nodes: [
+      { id: 'G', label: 'Gate',   localPos: [-0.38,  0,    0] }, // world y = 0.50
+      { id: 'D', label: 'Drain',  localPos: [ 0.38,  0.28, 0] }, // world y = 0.78
+      { id: 'S', label: 'Source', localPos: [ 0.38, -0.28, 0] }, // world y = 0.22
+    ],
+  },
+
+  inductor: {
+    label: 'Inductor',
+    color: '#c87820',
+    geometry: 'box',
+    args: [1.0, 0.28, 0.28],
+    yOffset: 0.20,
+    defaultProps: { inductance: 10 }, // mH
+    nodes: [
+      { id: 'A', label: 'Terminal A', localPos: [-0.58, 0, 0] }, // world y = 0.20
+      { id: 'B', label: 'Terminal B', localPos: [ 0.58, 0, 0] }, // world y = 0.20
+    ],
+  },
 }
 
 export const PALETTE_ORDER = [
-  'resistor', 'capacitor', 'potentiometer',
-  'led', 'npn_transistor',
+  'resistor', 'capacitor', 'potentiometer', 'inductor',
+  'led', 'npn_transistor', 'nmos_transistor', 'op_amp',
   'voltage_source', 'ground',
   'switch', 'junction',
 ]
@@ -138,5 +182,12 @@ export function getNodeWorldPos(component, nodeId) {
   if (!nodeDef) return [0, 0, 0]
   const [cx, , cz] = component.position
   const [lx, ly, lz] = nodeDef.localPos
-  return [cx + lx, def.yOffset + ly, cz + lz]
+  const r = component.rotation ?? 0
+  let rotLx = lx, rotLz = lz
+  if (r !== 0) {
+    const angle = r * Math.PI / 180
+    rotLx = lx * Math.cos(angle) - lz * Math.sin(angle)
+    rotLz = lx * Math.sin(angle) + lz * Math.cos(angle)
+  }
+  return [cx + rotLx, def.yOffset + ly, cz + rotLz]
 }
