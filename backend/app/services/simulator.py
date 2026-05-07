@@ -14,6 +14,15 @@ import subprocess
 import tempfile
 from typing import Dict, List, Tuple
 
+# LED SPICE model parameters keyed by color — Is chosen to approximate real Vf.
+_LED_MODELS: Dict[str, str] = {
+    "red":    "Is=1e-20 N=1.5",
+    "green":  "Is=1e-25 N=1.5",
+    "yellow": "Is=1e-22 N=1.5",
+    "blue":   "Is=1e-30 N=1.5",
+    "white":  "Is=1e-32 N=1.5",
+}
+
 # Terminal IDs per component type — must match frontend componentDefs.js
 _COMPONENT_NODES: Dict[str, List[str]] = {
     "resistor":        ["A", "B"],
@@ -99,7 +108,7 @@ def _build_netlist(
     elem_to_comp: Dict[str, str] = {}   # 'r1' -> component_id
     lines = ["* diode-sim generated netlist\n"]
 
-    has_led = any(c["type"] == "led" for c in components)
+    led_colors_used: set = set()   # which LED color models need .model lines
     bjt_model_lines: list = []    # per-instance .model for NPN (different hFE per device)
     mosfet_model_lines: list = [] # per-instance .model for NMOS (different Vth per device)
 
@@ -127,9 +136,14 @@ def _build_netlist(
             elem_to_comp[elem.lower()] = cid
 
         elif t == "led":
+            led_color = (props.get("color") or "red").lower()
+            if led_color not in _LED_MODELS:
+                led_color = "red"
+            model_name = f"DLED_{led_color.upper()}"
             elem = f"D{idx}"
-            lines.append(f"{elem} {net('A')} {net('K')} DLED\n")
+            lines.append(f"{elem} {net('A')} {net('K')} {model_name}\n")
             elem_to_comp[elem.lower()] = cid
+            led_colors_used.add(led_color)
 
         elif t == "voltage_source":
             voltage = float(props.get("voltage", 5))
@@ -198,8 +212,8 @@ def _build_netlist(
         elif t in ("ground", "junction"):
             pass  # pure net reference; no SPICE element needed
 
-    if has_led:
-        lines.append(".model DLED D(Is=1e-20 N=1.5)\n")
+    for led_color in led_colors_used:
+        lines.append(f".model DLED_{led_color.upper()} D({_LED_MODELS[led_color]})\n")
     for bjt_line in bjt_model_lines:
         lines.append(bjt_line)
     for mos_line in mosfet_model_lines:
@@ -208,7 +222,10 @@ def _build_netlist(
     # Collect non-ground net names for voltage prints
     net_names = sorted({n for n in nets.values() if n != "0"})
     v_prints = " ".join(f"v({n})" for n in net_names)
-    i_prints = " ".join(f"i({e})" for e in elem_to_comp)
+    # ngspice DC op-point only supports i() on voltage sources (V elements).
+    # Resistors, diodes, etc. cause "no such function" errors.
+    vsrc_elems = [e for e in elem_to_comp if re.match(r"^v\d+$", e)]
+    i_prints = " ".join(f"i({e})" for e in vsrc_elems)
 
     # In transient mode, start each capacitor's + node at 0V so the
     # charging curve is visible (without this ngspice starts from the
@@ -353,9 +370,10 @@ def _parse_output(
         except ValueError:
             pass
 
-    # ── "i(elem) = value" or "i(elem)   value" ───────────────────────────────
+    # ── "i(elem) = value"  (DC op-point print output) ────────────────────────
+    # Require the '=' so we never accidentally capture a table-row index.
     for m in re.finditer(
-        r"i\((\w+)\)\s*(?:=\s*)?([\-\d.eE+]+)", output, re.IGNORECASE
+        r"i\((\w+)\)\s*=\s*([-\d.eE+]+)", output, re.IGNORECASE
     ):
         try:
             currents[m.group(1).lower()] = float(m.group(2))
@@ -464,7 +482,9 @@ def run_simulation(
         branch_currents: Dict[str, float] = {}
         for elem_lower, amps in elem_currents.items():
             if elem_lower in elem_to_comp:
-                branch_currents[elem_to_comp[elem_lower]] = amps
+                # abs() because ngspice reports negative for conventional current
+                # flowing into the + terminal of a voltage source
+                branch_currents[elem_to_comp[elem_lower]] = abs(amps)
 
         if not net_voltages and proc.returncode != 0:
             err = (proc.stderr or proc.stdout or "unknown error")[:600]

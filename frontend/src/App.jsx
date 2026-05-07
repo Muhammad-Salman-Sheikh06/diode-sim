@@ -33,7 +33,7 @@ export default function App() {
       width: '100vw',
       height: '100vh',
       overflow: 'hidden',
-      background: '#040d08',
+      background: 'var(--bg)',
     }}>
       {/* Main row: sidebar + canvas */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>

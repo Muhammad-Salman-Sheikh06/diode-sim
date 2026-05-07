@@ -5,6 +5,11 @@ import {
 } from 'recharts'
 import { useCircuitStore } from '../store/circuitStore'
 
+const CHART_THEME = {
+  dark:  { grid: '#1a1a2a', axis: '#2a2a3a', tick: '#55556a', tooltip: '#12121a', tooltipBd: '#2a2a3a', tooltipLabel: '#6666aa' },
+  light: { grid: '#e0e0ec', axis: '#c0c0d0', tick: '#9090a8', tooltip: '#ffffff', tooltipBd: '#d0d0e0', tooltipLabel: '#8888aa' },
+}
+
 const COLORS = [
   '#00ff88', '#7ab8ff', '#ffaa44', '#ff6b6b',
   '#cc88ff', '#00f5d4', '#ffd166', '#ff8fab',
@@ -22,19 +27,19 @@ function fmtV(v) {
   return `${Number(v).toFixed(3)} V`
 }
 
-const CustomTooltip = ({ active, payload, label, unit }) => {
+const CustomTooltip = ({ active, payload, label, unit, ct }) => {
   if (!active || !payload?.length) return null
   return (
     <div style={{
-      background: '#12121a',
-      border: '1px solid #2a2a3a',
+      background: ct.tooltip,
+      border: `1px solid ${ct.tooltipBd}`,
       borderRadius: 6,
       padding: '7px 11px',
       fontSize: 11,
       fontFamily: "'Courier New', monospace",
-      boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+      boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
     }}>
-      <div style={{ color: '#6666aa', marginBottom: 5, fontSize: 10 }}>
+      <div style={{ color: ct.tooltipLabel, marginBottom: 5, fontSize: 10 }}>
         {label} {unit}
       </div>
       {payload.map((p) => (
@@ -53,6 +58,8 @@ const CustomTooltip = ({ active, payload, label, unit }) => {
 export function WaveformPanel() {
   // ── All hooks unconditionally at top ──────────────────────────────────────
   const simTransient = useCircuitStore((s) => s.simTransient)
+  const theme        = useCircuitStore((s) => s.theme)
+  const ct           = CHART_THEME[theme] ?? CHART_THEME.dark
   const [collapsed, setCollapsed] = useState(false)
   const [hidden, setHidden]       = useState(() => new Set())
 
@@ -86,8 +93,8 @@ export function WaveformPanel() {
   return (
     <div style={{
       flexShrink: 0,
-      background: '#0a0a0f',
-      borderTop: '1px solid #2a2a3a',
+      background: 'var(--bg)',
+      borderTop: '1px solid var(--border)',
       display: 'flex',
       flexDirection: 'column',
       fontFamily: "'Courier New', monospace",
@@ -102,14 +109,14 @@ export function WaveformPanel() {
           justifyContent: 'space-between',
           padding: '7px 16px',
           cursor: 'pointer',
-          background: '#12121a',
-          borderBottom: collapsed ? 'none' : '1px solid #2a2a3a',
+          background: 'var(--surf)',
+          borderBottom: collapsed ? 'none' : '1px solid var(--border)',
           userSelect: 'none',
           minHeight: 40,
         }}
       >
         <span style={{
-          fontSize: 9, fontWeight: 700, color: '#9090b0',
+          fontSize: 9, fontWeight: 700, color: 'var(--t2)',
           letterSpacing: 2.5, textTransform: 'uppercase',
         }}>
           Waveforms
@@ -130,9 +137,9 @@ export function WaveformPanel() {
                   gap: 6,
                   padding: '3px 9px 3px 6px',
                   background: isHidden ? 'transparent' : `${color}18`,
-                  border: `1px solid ${isHidden ? '#2a2a3a' : color}`,
+                  border: `1px solid ${isHidden ? 'var(--border)' : color}`,
                   borderRadius: 20,
-                  color: isHidden ? '#44445a' : '#e8e8f0',
+                  color: isHidden ? 'var(--muted)' : 'var(--t1)',
                   cursor: 'pointer',
                   fontSize: 10,
                   fontFamily: "'Courier New', monospace",
@@ -153,7 +160,7 @@ export function WaveformPanel() {
 
           {/* Collapse arrow */}
           <span style={{
-            fontSize: 10, color: '#44445a', marginLeft: 4,
+            fontSize: 10, color: 'var(--muted)', marginLeft: 4,
             transform: collapsed ? 'rotate(180deg)' : 'none',
             transition: 'transform 200ms ease',
             display: 'inline-block',
@@ -163,25 +170,25 @@ export function WaveformPanel() {
 
       {/* ── Chart ── */}
       {!collapsed && (
-        <div style={{ height: 210, padding: '10px 8px 10px 0', background: '#0a0a0f' }}>
+        <div style={{ height: 210, padding: '10px 8px 10px 0', background: 'var(--bg)' }}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData} margin={{ top: 4, right: 20, left: 4, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="2 4" stroke="#1a1a2a" />
+              <CartesianGrid strokeDasharray="2 4" stroke={ct.grid} />
               <XAxis
                 dataKey="t"
-                tick={{ fill: '#55556a', fontSize: 10 }}
+                tick={{ fill: ct.tick, fontSize: 10 }}
                 tickLine={false}
-                axisLine={{ stroke: '#2a2a3a' }}
+                axisLine={{ stroke: ct.axis }}
                 tickFormatter={(v) => `${v} ${unit}`}
               />
               <YAxis
-                tick={{ fill: '#55556a', fontSize: 10 }}
+                tick={{ fill: ct.tick, fontSize: 10 }}
                 tickLine={false}
-                axisLine={{ stroke: '#2a2a3a' }}
+                axisLine={{ stroke: ct.axis }}
                 width={46}
                 tickFormatter={(v) => `${v}V`}
               />
-              <Tooltip content={<CustomTooltip unit={unit} />} />
+              <Tooltip content={<CustomTooltip unit={unit} ct={ct} />} />
               {netKeys.map((k, i) =>
                 hidden.has(k) ? null : (
                   <Line

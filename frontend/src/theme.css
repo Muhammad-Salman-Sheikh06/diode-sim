@@ -1,24 +1,79 @@
-/* Global design-system reset and helpers */
+/* ── CSS custom properties — theme.css ────────────────────────────────────── */
+/* Dark mode is the default; [data-theme="light"] overrides every variable.   */
+/* Applied by circuitStore.js on document.documentElement at startup.         */
+
+:root {
+  --bg:            #0a0a0f;
+  --surf:          #12121a;
+  --surf-hi:       #1c1c2a;
+  --surf-hov:      #16162a;   /* palette / IO button hover bg */
+  --border:        #2a2a3a;
+  --accent:        #00ff88;
+  --accent-dim:    #0a2a1a;
+  --t1:            #e8e8f0;
+  --t2:            #9090b0;
+  --muted:         #44445a;
+  --err:           #ff5555;
+  --err-bg:        #1e0808;
+  --err-bd:        #5a1a1a;
+  --ia-hov-bg:     #0d1a27;   /* interactive link/example button hover bg */
+  --ia-hov-bd:     #2255aa;   /* interactive link/example button hover border */
+  --sim-load-bd:   #1d4a2a;   /* simulate button border while loading */
+  --sim-load-c:    #337755;   /* simulate button text while loading */
+  --badge-tran-bg: #1a2a0a;
+  --badge-tran-c:  #88cc44;
+  --badge-tran-bd: #3a5a1a;
+  --badge-dc-bd:   #1a4a2a;
+  --label-bg:      rgba(0,10,5,0.9);
+  --focus-glow:    rgba(0,255,136,0.18);
+}
+
+[data-theme="light"] {
+  --bg:            #f0f0f5;
+  --surf:          #ffffff;
+  --surf-hi:       #f4f4f9;
+  --surf-hov:      #e8e8f4;
+  --border:        #d0d0e0;
+  --accent:        #0066cc;
+  --accent-dim:    #ddeeff;
+  --t1:            #1a1a2a;
+  --t2:            #555570;
+  --muted:         #9090aa;
+  --err:           #cc2200;
+  --err-bg:        #fff0ee;
+  --err-bd:        #ffd0c0;
+  --ia-hov-bg:     #e8f0ff;
+  --ia-hov-bd:     #0066cc;
+  --sim-load-bd:   #4499ee;
+  --sim-load-c:    #0055bb;
+  --badge-tran-bg: #e8f8e0;
+  --badge-tran-c:  #3a8a20;
+  --badge-tran-bd: #88cc44;
+  --badge-dc-bd:   #0066cc;
+  --label-bg:      rgba(240,240,250,0.92);
+  --focus-glow:    rgba(0,102,204,0.18);
+}
+
+/* ── Reset and helpers ─────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 
-/* WCAG AA focus ring — visible on keyboard nav, hidden on mouse click */
+/* WCAG AA focus ring */
 :focus-visible {
-  outline: 2px solid #00ff88 !important;
+  outline: 2px solid var(--accent) !important;
   outline-offset: 2px;
 }
 :focus:not(:focus-visible) { outline: none; }
 
-/* Custom scrollbar */
+/* Scrollbar */
 ::-webkit-scrollbar        { width: 4px; height: 4px; }
-::-webkit-scrollbar-track  { background: #0a0a0f; }
-::-webkit-scrollbar-thumb  { background: #2a2a3a; border-radius: 2px; }
-::-webkit-scrollbar-thumb:hover { background: #44445a; }
+::-webkit-scrollbar-track  { background: var(--bg); }
+::-webkit-scrollbar-thumb  { background: var(--border); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
-/* Sidebar text inputs — focus ring with glow */
+/* Sidebar text inputs — focus glow */
 .sid-input:focus {
-  border-color: #00ff88 !important;
-  box-shadow: 0 0 0 2px rgba(0, 255, 136, 0.18) !important;
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px var(--focus-glow) !important;
 }
 
-/* Smooth button resets */
 button { font-family: inherit; border-style: solid; }

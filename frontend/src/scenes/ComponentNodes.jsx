@@ -6,7 +6,7 @@ import { NodeVoltageLabel } from './NodeVoltageLabel'
 const NODE_R = 0.065
 const NODE_SEGS = 8
 
-function NodeSphere({ worldPos, isSource, isConnected, onNodeClick }) {
+function NodeSphere({ worldPos, isSource, isConnected, isSnapped, onNodeClick }) {
   const [hovered, setHovered] = useState(false)
   const meshRef = useRef()
 
@@ -19,17 +19,26 @@ function NodeSphere({ worldPos, isSource, isConnected, onNodeClick }) {
   })
 
   const color = isSource   ? '#ffaa00'
+    : isSnapped            ? '#00ff88'
     : hovered              ? '#00ff88'
     : isConnected          ? '#4499ff'
     :                        '#777777'
 
-  const emissiveIntensity = isSource ? 0.9 : hovered ? 0.6 : isConnected ? 0.25 : 0.08
+  const emissiveIntensity = isSource  ? 0.9
+    : isSnapped                       ? 0.85
+    : hovered                         ? 0.6
+    : isConnected                     ? 0.25
+    :                                   0.08
+
+  const scale = isSnapped            ? 2.2
+    : isSource || hovered            ? 1.5
+    :                                  1
 
   return (
     <mesh
       ref={meshRef}
       position={worldPos}
-      scale={hovered || isSource ? 1.5 : 1}
+      scale={scale}
       onPointerEnter={(e) => { e.stopPropagation(); setHovered(true) }}
       onPointerLeave={() => setHovered(false)}
       onClick={(e) => { e.stopPropagation(); onNodeClick() }}
@@ -44,7 +53,7 @@ function NodeSphere({ worldPos, isSource, isConnected, onNodeClick }) {
   )
 }
 
-export function ComponentNodes({ component }) {
+export function ComponentNodes({ component, snapTarget }) {
   const { wires, wiringFrom, activeType, startWiring, completeWiring, simVoltages } =
     useCircuitStore()
   const def = COMPONENT_DEFS[component.type]
@@ -66,6 +75,8 @@ export function ComponentNodes({ component }) {
       {def.nodes.map((nodeDef) => {
         const isSource =
           wiringFrom?.componentId === component.id && wiringFrom?.nodeId === nodeDef.id
+        const isSnapped =
+          snapTarget?.componentId === component.id && snapTarget?.nodeId === nodeDef.id
         const worldPos = getNodeWorldPos(component, nodeDef.id)
         const voltage  = simVoltages?.[`${component.id}:${nodeDef.id}`]
 
@@ -84,6 +95,7 @@ export function ComponentNodes({ component }) {
               worldPos={worldPos}
               isSource={isSource}
               isConnected={connectedNodeIds.has(nodeDef.id)}
+              isSnapped={isSnapped}
               onNodeClick={handleClick}
             />
             {voltage !== undefined && (

@@ -1,6 +1,15 @@
 // Node localPos is relative to the mesh centre at [x, yOffset, z] in world space.
 // World Y of a node = yOffset + localPos[1].
 // Rule: all nodes must have world Y >= 0.15 so spheres clear the grid surface.
+
+export const LED_COLORS = {
+  red:    { hex: '#ff2200', label: 'Red' },
+  green:  { hex: '#00ff44', label: 'Green' },
+  yellow: { hex: '#ffee00', label: 'Yellow' },
+  blue:   { hex: '#4488ff', label: 'Blue' },
+  white:  { hex: '#ffffff', label: 'White' },
+}
+
 export const COMPONENT_DEFS = {
 
   // ── Passives ───────────────────────────────────────────────────────────────
@@ -48,12 +57,12 @@ export const COMPONENT_DEFS = {
   // ── Semiconductors ────────────────────────────────────────────────────────
   led: {
     label: 'LED',
-    color: '#e03030',
+    color: '#ff2200',
     geometry: 'sphere',
     args: [0.3, 16, 16],
     yOffset: 0.55,
     emissive: true,
-    defaultProps: { vf: 2.0 },
+    defaultProps: { color: 'red' },
     nodes: [
       { id: 'A', label: 'Anode',   localPos: [0,  0.40, 0] }, // world y = 0.95
       { id: 'K', label: 'Cathode', localPos: [0, -0.30, 0] }, // world y = 0.25

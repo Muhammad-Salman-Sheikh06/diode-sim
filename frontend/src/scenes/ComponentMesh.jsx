@@ -1,7 +1,7 @@
 import { memo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { MathUtils } from 'three'
-import { COMPONENT_DEFS } from './componentDefs'
+import { COMPONENT_DEFS, LED_COLORS, getNodeWorldPos } from './componentDefs'
 import { useCircuitStore } from '../store/circuitStore'
 import { ResistorMesh }    from './meshes/ResistorMesh'
 import { CapacitorMesh }   from './meshes/CapacitorMesh'
@@ -60,6 +60,13 @@ export const ComponentMesh = memo(function ComponentMesh({ type, opacity = 1, id
   const def = COMPONENT_DEFS[type]
   const matRef = useRef()
 
+  const ledColorKey = useCircuitStore((s) =>
+    type === 'led' && id
+      ? (s.components.find(c => c.id === id)?.props?.color ?? 'red')
+      : 'red'
+  )
+  const ledHex = LED_COLORS[ledColorKey]?.hex ?? LED_COLORS.red.hex
+
   useFrame((_, delta) => {
     if (!matRef.current) return
     const { simVoltages, selectedComponentId } = useCircuitStore.getState()
@@ -99,14 +106,33 @@ export const ComponentMesh = memo(function ComponentMesh({ type, opacity = 1, id
   const handleClick = (e) => {
     e.stopPropagation()
     if (!id) return
-    const { activeType, wiringFrom, selectComponent } = useCircuitStore.getState()
-    if (activeType || wiringFrom) return
-    selectComponent(id)
+    const { activeType, wiringFrom, completeWiring, selectComponent } =
+      useCircuitStore.getState()
+    if (activeType) return  // placement mode — do nothing
+
+    if (!wiringFrom) {
+      // Nothing active — select for properties
+      selectComponent(id)
+      return
+    }
+
+    // Wiring mode — snap-complete to the nearest node on this component
+    if (wiringFrom.componentId === id) return  // don't wire to self
+    const component = useCircuitStore.getState().components.find((c) => c.id === id)
+    if (!component || !def?.nodes?.length) return
+
+    let nearestId = null, nearestDist = Infinity
+    for (const nd of def.nodes) {
+      const np = getNodeWorldPos(component, nd.id)
+      const d = Math.sqrt((e.point.x - np[0]) ** 2 + (e.point.y - np[1]) ** 2 + (e.point.z - np[2]) ** 2)
+      if (d < nearestDist) { nearestDist = d; nearestId = nd.id }
+    }
+    if (nearestId) completeWiring(id, nearestId)
   }
 
   return (
     <group position={[0, def.yOffset, 0]} onClick={handleClick}>
-      <MeshComponent matRef={matRef} opacity={opacity} />
+      <MeshComponent matRef={matRef} opacity={opacity} color={type === 'led' ? ledHex : undefined} />
     </group>
   )
 })

@@ -18,7 +18,7 @@ export function NodeVoltageLabel({ worldPos, voltage }) {
       style={{ pointerEvents: 'none' }}
     >
       <div style={{
-        background: 'rgba(0,10,5,0.9)',
+        background: 'var(--label-bg)',
         border: `1px solid ${color}`,
         borderRadius: 3,
         padding: '1px 5px',

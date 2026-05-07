@@ -1,8 +1,25 @@
 import { create } from 'zustand'
 import { COMPONENT_DEFS } from '../scenes/componentDefs'
 
+// Apply saved theme before React mounts so there is no flash of wrong theme.
+const _initTheme = (() => {
+  const t = localStorage.getItem('theme') ?? 'dark'
+  document.documentElement.dataset.theme = t
+  return t
+})()
+
 let _seq = 0
 const uid = () => `c${++_seq}`
+
+const MAX_HISTORY = 50
+
+function snap(s) {
+  return { components: s.components, wires: s.wires }
+}
+
+function pushHistory(s) {
+  return [...s.history.slice(-(MAX_HISTORY - 1)), snap(s)]
+}
 
 export const useCircuitStore = create((set, get) => ({
   components: [],
@@ -13,6 +30,11 @@ export const useCircuitStore = create((set, get) => ({
   selectedWireId: null,
   selectedComponentId: null,
 
+  // Undo / redo
+  history: [],   // [{components, wires}]
+  future: [],    // [{components, wires}]
+  toastMsg: null,
+
   // Simulation state
   simMode: 'dc',                          // 'dc' | 'transient'
   simParams: { tranStop: '1m', tranStep: '1u' },
@@ -21,6 +43,47 @@ export const useCircuitStore = create((set, get) => ({
   simTransient: null,  // { time, nets, nodes }         — transient
   simLoading: false,
   simError: null,
+
+  // ── Theme ─────────────────────────────────────────────────────────────────
+  theme: _initTheme,
+  setTheme: (t) => {
+    document.documentElement.dataset.theme = t
+    localStorage.setItem('theme', t)
+    set({ theme: t })
+  },
+
+  // ── Undo / Redo ───────────────────────────────────────────────────────────
+  undo: () =>
+    set((s) => {
+      if (s.history.length === 0) return {}
+      const prev = s.history[s.history.length - 1]
+      return {
+        history: s.history.slice(0, -1),
+        future: [snap(s), ...s.future.slice(0, MAX_HISTORY - 1)],
+        components: prev.components,
+        wires: prev.wires,
+        simVoltages: null,
+        simCurrents: null,
+        toastMsg: 'Undone',
+      }
+    }),
+
+  redo: () =>
+    set((s) => {
+      if (s.future.length === 0) return {}
+      const next = s.future[0]
+      return {
+        history: [...s.history.slice(-(MAX_HISTORY - 1)), snap(s)],
+        future: s.future.slice(1),
+        components: next.components,
+        wires: next.wires,
+        simVoltages: null,
+        simCurrents: null,
+        toastMsg: 'Redone',
+      }
+    }),
+
+  clearToast: () => set({ toastMsg: null }),
 
   // ── Placement ─────────────────────────────────────────────────────────────
   setActiveType: (type) =>
@@ -36,6 +99,8 @@ export const useCircuitStore = create((set, get) => ({
 
   placeComponent: (type, position) =>
     set((s) => ({
+      history: pushHistory(s),
+      future: [],
       components: [
         ...s.components,
         {
@@ -54,6 +119,8 @@ export const useCircuitStore = create((set, get) => ({
 
   removeComponent: (id) =>
     set((s) => ({
+      history: pushHistory(s),
+      future: [],
       components: s.components.filter((c) => c.id !== id),
       wires: s.wires.filter(
         (w) => w.fromComponentId !== id && w.toComponentId !== id
@@ -68,6 +135,8 @@ export const useCircuitStore = create((set, get) => ({
 
   rotateComponent: (id) =>
     set((s) => ({
+      history: pushHistory(s),
+      future: [],
       components: s.components.map((c) =>
         c.id === id ? { ...c, rotation: ((c.rotation ?? 0) + 90) % 360 } : c
       ),
@@ -77,6 +146,8 @@ export const useCircuitStore = create((set, get) => ({
 
   updateComponentState: (id, patch) =>
     set((s) => ({
+      history: pushHistory(s),
+      future: [],
       components: s.components.map((c) =>
         c.id === id ? { ...c, state: { ...c.state, ...patch } } : c
       ),
@@ -86,6 +157,8 @@ export const useCircuitStore = create((set, get) => ({
 
   updateComponentProps: (id, patch) =>
     set((s) => ({
+      history: pushHistory(s),
+      future: [],
       components: s.components.map((c) =>
         c.id === id ? { ...c, props: { ...c.props, ...patch } } : c
       ),
@@ -113,6 +186,8 @@ export const useCircuitStore = create((set, get) => ({
       if (isDuplicate) return { wiringFrom: null }
 
       return {
+        history: pushHistory(s),
+        future: [],
         wires: [
           ...s.wires,
           {
@@ -135,6 +210,8 @@ export const useCircuitStore = create((set, get) => ({
 
   removeWire: (id) =>
     set((s) => ({
+      history: pushHistory(s),
+      future: [],
       wires: s.wires.filter((w) => w.id !== id),
       selectedWireId: s.selectedWireId === id ? null : s.selectedWireId,
       simVoltages: null,
@@ -180,9 +257,18 @@ export const useCircuitStore = create((set, get) => ({
             simLoading: false,
           })
         } else {
+          // branchCurrents only contains voltage-source entries (ngspice only
+          // supports i() on V elements for DC op-point). Broadcast that current
+          // to every component so wire arrows work regardless of component type.
+          const rawCurrents = data.branchCurrents ?? null
+          let simCurrents = null
+          if (rawCurrents && Object.keys(rawCurrents).length > 0) {
+            const vsrcAmps = Object.values(rawCurrents)[0]  // abs() applied in backend
+            simCurrents = Object.fromEntries(components.map(c => [c.id, vsrcAmps]))
+          }
           set({
-            simVoltages:  data.nodeVoltages   ?? null,
-            simCurrents:  data.branchCurrents ?? null,
+            simVoltages:  data.nodeVoltages ?? null,
+            simCurrents,
             simTransient: null,
             simLoading:   false,
           })
@@ -202,6 +288,7 @@ export const useCircuitStore = create((set, get) => ({
     _seq = 0
     set({
       components: [], wires: [],
+      history: [], future: [],
       simVoltages: null, simCurrents: null, simError: null, simLoading: false,
       activeType: null, ghostRotation: 0, wiringFrom: null, selectedWireId: null, selectedComponentId: null,
     })
@@ -218,6 +305,7 @@ export const useCircuitStore = create((set, get) => ({
     set({
       components: data.components ?? [],
       wires: data.wires ?? [],
+      history: [], future: [],
       simVoltages: null, simCurrents: null, simError: null, simLoading: false,
       activeType: null, wiringFrom: null, selectedWireId: null, selectedComponentId: null,
     })
